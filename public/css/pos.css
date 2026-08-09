@@ -1,0 +1,1201 @@
+/* ==========================================================================
+   POS — ecra touch atras do balcao.
+   Regras: alvos de toque >= 64px, zero scroll horizontal, contraste alto.
+   ========================================================================== */
+
+:root {
+  --pos-toque: 64px;
+  --pos-tile: 104px;
+  --pos-gap: 10px;
+  --pos-raio: 14px;
+  --pos-fundo: #10151c;
+  --pos-painel: #1b232e;
+  --pos-painel-claro: #263141;
+  --pos-borda: #35435a;
+  --pos-texto: #f4f7fb;
+  --pos-texto-fraco: #a9b6c8;
+  --pos-acento: #16a34a;
+  --pos-acento-escuro: #12833c;
+  --pos-perigo: #dc2626;
+  --pos-aviso: #f59e0b;
+}
+
+/* O layout base envolve tudo num <main class="container-fluid py-3">;
+   no POS queremos ecra inteiro sem margens. */
+body.pos-body {
+  background: var(--pos-fundo);
+  color: var(--pos-texto);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+body.pos-body > main.container-fluid {
+  padding: 0 !important;
+  margin: 0;
+  max-width: none;
+}
+
+body.pos-body .alert {
+  margin: 0;
+  border-radius: 0;
+}
+
+.pos {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  font-size: 16px;
+}
+
+/* O atributo `hidden` tem de ganhar a qualquer `display` definido acima:
+   varios elementos do POS sao escondidos por JS (grelha, badges, campos). */
+.pos [hidden],
+.pos-modal [hidden],
+.pos-sucesso [hidden] {
+  display: none !important;
+}
+
+/* Nada de seleccao de texto acidental num ecra touch. */
+.pos button,
+.pos .pos-mini-btn,
+.pos .pos-tile {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ---------- Barra superior ---------- */
+.pos-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pos-gap);
+  padding: 6px 12px;
+  background: #0b1016;
+  border-bottom: 1px solid var(--pos-borda);
+  flex: 0 0 auto;
+}
+
+.pos-topo-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  font-size: 0.9rem;
+  color: var(--pos-texto-fraco);
+}
+
+.pos-topo-marca {
+  font-weight: 700;
+  color: var(--pos-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-topo-operador,
+.pos-topo-relogio {
+  white-space: nowrap;
+}
+
+.pos-topo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Botoes deliberadamente pequenos: sao "saidas" do ecra de movimentos. */
+.pos-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  border-radius: 8px;
+  border: 1px solid var(--pos-borda);
+  background: transparent;
+  color: var(--pos-texto-fraco);
+  text-decoration: none;
+}
+
+.pos-mini-btn:hover,
+.pos-mini-btn:focus-visible {
+  color: var(--pos-texto);
+  border-color: var(--pos-texto-fraco);
+}
+
+.pos-mini-btn-sair:hover {
+  color: #fff;
+  background: var(--pos-perigo);
+  border-color: var(--pos-perigo);
+}
+
+/* ---------- Aviso de caixa fechada ----------
+   Faixa fina entre a barra superior e o corpo. Nao rouba altura ao catalogo
+   (flex: 0 0 auto) nem intercepta toques fora do proprio atalho. */
+.pos-aviso-caixa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  line-height: 1.25;
+  color: #1c1300;
+  background: var(--pos-aviso);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.pos-aviso-caixa i {
+  font-size: 1rem;
+  flex: 0 0 auto;
+}
+
+.pos-aviso-caixa-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--pos-aviso);
+  background: #1c1300;
+}
+
+.pos-aviso-caixa-btn:hover,
+.pos-aviso-caixa-btn:focus-visible {
+  color: #fff;
+  background: #000;
+}
+
+/* ---------- Corpo em 2 colunas ---------- */
+.pos-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- Catalogo ---------- */
+.pos-catalogo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pos-filtros {
+  display: flex;
+  align-items: center;
+  gap: var(--pos-gap);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--pos-borda);
+  flex: 0 0 auto;
+}
+
+.pos-categorias {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.pos-categorias::-webkit-scrollbar {
+  display: none;
+}
+
+.pos-categoria {
+  flex: 0 0 auto;
+  min-height: var(--pos-toque);
+  min-width: 110px;
+  padding: 8px 18px;
+  border-radius: var(--pos-raio);
+  border: 2px solid transparent;
+  background: var(--pos-painel-claro);
+  color: var(--pos-texto);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.pos-categoria.is-ativa {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+.pos-pesquisa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 240px;
+}
+
+.pos-pesquisa > .bi-search {
+  position: absolute;
+  left: 12px;
+  color: var(--pos-texto-fraco);
+  pointer-events: none;
+}
+
+.pos-pesquisa-input {
+  width: 100%;
+  min-height: var(--pos-toque);
+  padding: 8px 44px 8px 36px;
+  border-radius: var(--pos-raio);
+  border: 1px solid var(--pos-borda);
+  background: var(--pos-painel);
+  color: var(--pos-texto);
+  font-size: 1.05rem;
+}
+
+.pos-pesquisa-input::placeholder {
+  color: var(--pos-texto-fraco);
+}
+
+.pos-pesquisa-limpar {
+  position: absolute;
+  right: 6px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--pos-painel-claro);
+  color: var(--pos-texto);
+}
+
+/* ---------- Grelha de artigos ---------- */
+.pos-grelha {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--pos-gap);
+  padding: 12px;
+  align-content: start;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pos-tile {
+  position: relative;
+  min-height: var(--pos-tile);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-painel-claro);
+  color: #fff;
+  text-align: left;
+  overflow: hidden;
+  transition: transform 0.06s ease-out;
+}
+
+.pos-tile:active {
+  transform: scale(0.96);
+}
+
+/* Feedback visual imediato ao tocar. */
+.pos-tile.is-tocado {
+  animation: pos-flash 0.28s ease-out;
+}
+
+@keyframes pos-flash {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9) inset; }
+  40% { box-shadow: 0 0 0 200px rgba(255, 255, 255, 0.35) inset; }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0) inset; }
+}
+
+.pos-tile-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Legibilidade do nome/preco por cima da imagem ou da cor da categoria. */
+.pos-tile-texto {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.pos-tile-nome {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pos-tile-preco {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.pos-tile-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 15px;
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Alerta de stock no tile. Ambar = a acabar; vermelho = esgotado/negativo.
+   Nunca desativa o tile: e so um sinal para o funcionario avisar o responsavel. */
+.pos-tile-stock {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+  /* Contorno escuro: garante contraste sobre imagens claras do artigo. */
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  background: #f59e0b;
+  color: #1a1200;
+}
+
+.pos-tile-stock.is-esgotado {
+  background: var(--pos-perigo);
+  color: #fff;
+}
+
+/* ---------- Artigos em falta (stock abaixo do minimo) ---------- */
+
+/* Indicador no topo. Escondido quando nao ha nada em falta (atributo hidden). */
+.pos-falta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: var(--pos-toque);
+  padding: 0 18px;
+  border: 2px solid #f59e0b;
+  border-radius: var(--pos-raio);
+  background: #4a3305;
+  color: #ffd694;
+  font-size: 0.98rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pos-falta-btn[hidden] {
+  display: none;
+}
+
+.pos-falta-btn i {
+  font-size: 1.3rem;
+  color: #fbbf24;
+}
+
+.pos-falta-btn:active {
+  background: #6b4907;
+}
+
+/* Painel/modal com a lista, sobre o ecra todo. */
+.pos-falta {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(3, 7, 12, 0.82);
+}
+
+.pos-falta[hidden] {
+  display: none;
+}
+
+.pos-falta-caixa {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: 20px;
+  border-radius: var(--pos-raio);
+  border: 2px solid #f59e0b;
+  background: var(--pos-painel);
+  color: var(--pos-texto);
+}
+
+.pos-falta-titulo {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.pos-falta-ajuda {
+  margin: 6px 0 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--pos-texto);
+}
+
+.pos-falta-lista {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pos-falta-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border-left: 6px solid #f59e0b;
+  background: var(--pos-painel-claro);
+}
+
+.pos-falta-item.is-esgotado {
+  border-left-color: var(--pos-perigo);
+}
+
+.pos-falta-nome {
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.pos-falta-valores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+.pos-falta-atual {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.pos-falta-item.is-esgotado .pos-falta-atual {
+  color: #ff8a8a;
+}
+
+.pos-falta-minimo {
+  font-size: 0.85rem;
+  color: var(--pos-texto-fraco);
+}
+
+.pos-falta-fechar {
+  min-height: 72px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-acento);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.pos-falta-fechar:active {
+  background: var(--pos-acento-escuro);
+}
+
+/* ---------- Estado (loading / vazio / erro) ---------- */
+.pos-estado {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--pos-texto-fraco);
+}
+
+.pos-estado[hidden] {
+  display: none;
+}
+
+.pos-estado .pos-estado-btn {
+  margin-top: 12px;
+  min-height: var(--pos-toque);
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-acento);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* ---------- Carrinho ---------- */
+.pos-carrinho {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--pos-painel);
+  border-left: 1px solid var(--pos-borda);
+}
+
+.pos-carrinho-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--pos-borda);
+  flex: 0 0 auto;
+}
+
+.pos-carrinho-titulo {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.pos-limpar {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--pos-borda);
+  background: transparent;
+  color: var(--pos-texto-fraco);
+  font-size: 1.2rem;
+}
+
+.pos-limpar:not(:disabled):hover {
+  background: var(--pos-perigo);
+  border-color: var(--pos-perigo);
+  color: #fff;
+}
+
+.pos-limpar:disabled {
+  opacity: 0.35;
+}
+
+.pos-linhas {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pos-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--pos-painel-claro);
+}
+
+.pos-linha.is-nova {
+  animation: pos-entrada 0.25s ease-out;
+}
+
+@keyframes pos-entrada {
+  from { background: var(--pos-acento); }
+  to { background: var(--pos-painel-claro); }
+}
+
+.pos-linha-info {
+  min-width: 0;
+}
+
+.pos-linha-nome {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pos-linha-unit {
+  font-size: 0.82rem;
+  color: var(--pos-texto-fraco);
+}
+
+.pos-linha-subtotal {
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pos-linha-acoes {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-qtd-btn {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: #3a4a61;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.pos-qtd-btn:active {
+  background: #4b5f7c;
+}
+
+.pos-qtd-valor {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.pos-remover {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: #4a2020;
+  color: #ffb4b4;
+  font-size: 1.1rem;
+}
+
+.pos-remover:active {
+  background: var(--pos-perigo);
+  color: #fff;
+}
+
+.pos-carrinho-vazio {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--pos-texto-fraco);
+  font-size: 0.95rem;
+}
+
+.pos-carrinho-vazio[hidden] {
+  display: none;
+}
+
+.pos-carrinho-vazio .bi {
+  display: block;
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.pos-carrinho-rodape {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-top: 1px solid var(--pos-borda);
+  background: #141c26;
+}
+
+.pos-total-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pos-total-etiqueta {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--pos-texto-fraco);
+  letter-spacing: 0.06em;
+}
+
+.pos-total-valor {
+  font-size: clamp(2.2rem, 4.2vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-total-artigos {
+  font-size: 0.85rem;
+  color: var(--pos-texto-fraco);
+  margin-bottom: 10px;
+}
+
+.pos-registar {
+  width: 100%;
+  min-height: 88px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-acento);
+  color: #fff;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.pos-registar:not(:disabled):active {
+  background: var(--pos-acento-escuro);
+}
+
+.pos-registar:disabled {
+  background: #2c3746;
+  color: #6d7d92;
+}
+
+/* ---------- Confirmacao do movimento (ecra inteiro) ---------- */
+.pos-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  background: var(--pos-fundo);
+}
+
+.pos-modal[hidden],
+.pos-sucesso[hidden] {
+  display: none;
+}
+
+.pos-modal-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--pos-borda);
+  flex: 0 0 auto;
+}
+
+.pos-modal-titulo {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.pos-modal-total {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.pos-modal-total span {
+  color: var(--pos-texto-fraco);
+  font-size: 0.95rem;
+}
+
+.pos-modal-total strong {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-modal-fechar {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--pos-borda);
+  background: transparent;
+  color: var(--pos-texto);
+  font-size: 1.2rem;
+}
+
+.pos-modal-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pos-modal-ajuda {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--pos-raio);
+  background: var(--pos-painel);
+  border: 1px solid var(--pos-borda);
+  color: var(--pos-texto-fraco);
+  font-size: 1.05rem;
+}
+
+/* Resumo do que vai ser registado (so leitura). */
+.pos-resumo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pos-resumo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-radius: var(--pos-raio);
+  border: 1px solid var(--pos-borda);
+  background: var(--pos-painel);
+}
+
+.pos-resumo-nome {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.pos-resumo-valor {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.pos-movimento-erro {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #450a0a;
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.pos-movimento-erro[hidden] {
+  display: none;
+}
+
+.pos-modal-rodape {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--pos-borda);
+  background: #0b1016;
+}
+
+.pos-btn-cancelar {
+  min-height: 80px;
+  border-radius: var(--pos-raio);
+  border: 1px solid var(--pos-borda);
+  background: transparent;
+  color: var(--pos-texto);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.pos-btn-confirmar {
+  min-height: 80px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-acento);
+  color: #fff;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.pos-btn-confirmar:disabled {
+  background: #2c3746;
+  color: #6d7d92;
+}
+
+.pos-btn-confirmar.is-ocupado {
+  opacity: 0.7;
+}
+
+/* ---------- Ecra de sucesso ---------- */
+.pos-sucesso {
+  position: fixed;
+  inset: 0;
+  z-index: 1090;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 10, 16, 0.96);
+}
+
+.pos-sucesso-caixa {
+  width: min(640px, 100%);
+  padding: 28px 24px;
+  border-radius: 20px;
+  background: var(--pos-painel);
+  border: 2px solid var(--pos-acento);
+  text-align: center;
+}
+
+.pos-sucesso-icone {
+  font-size: 3.6rem;
+  color: var(--pos-acento);
+}
+
+.pos-sucesso-titulo {
+  margin: 8px 0 4px;
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.pos-sucesso-numero {
+  margin: 0 0 16px;
+  color: var(--pos-texto-fraco);
+}
+
+.pos-sucesso-acoes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.pos-sucesso-nova {
+  min-height: 80px;
+  border: 0;
+  border-radius: var(--pos-raio);
+  background: var(--pos-acento);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+/* ---------- Confirmacao (painel proprio, substitui o confirm() nativo) ----------
+   Marcacao criada por /js/confirmar.js e pendurada no <body>, fora de .pos —
+   por isso as regras de [hidden] tem de estar aqui tambem. */
+.pos-confirmar {
+  position: fixed;
+  inset: 0;
+  z-index: 1095;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(3, 7, 12, 0.88);
+}
+
+.pos-confirmar[hidden] {
+  display: none !important;
+}
+
+.pos-confirmar-caixa {
+  width: min(640px, 100%);
+  padding: 24px;
+  border-radius: 20px;
+  border: 2px solid var(--pos-borda);
+  background: var(--pos-painel);
+  color: var(--pos-texto);
+}
+
+.pos-confirmar-titulo {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.pos-confirmar-mensagem {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pos-confirmar-detalhe {
+  margin: 0 0 20px;
+  font-size: 1.05rem;
+  color: var(--pos-texto-fraco);
+  overflow-wrap: anywhere;
+}
+
+.pos-confirmar-detalhe[hidden] {
+  display: none !important;
+}
+
+/* Cancelar fica a ESQUERDA, onde o operador ja espera o botao de recuo.
+   O botao destrutivo nunca ocupa esse lugar e leva um intervalo largo. */
+.pos-confirmar-accoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.pos-confirmar-cancelar,
+.pos-confirmar-ok {
+  min-height: 88px;
+  border-radius: var(--pos-raio);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0 12px;
+}
+
+.pos-confirmar-cancelar {
+  border: 2px solid var(--pos-borda);
+  background: var(--pos-painel-claro);
+  color: var(--pos-texto);
+}
+
+.pos-confirmar-ok {
+  border: 0;
+  background: var(--pos-acento);
+  color: #fff;
+}
+
+.pos-confirmar-ok.is-perigo {
+  background: var(--pos-perigo);
+  box-shadow: inset 0 0 0 2px #ff8a8a;
+}
+
+.pos-confirmar-cancelar:active {
+  background: var(--pos-borda);
+}
+
+.pos-confirmar-ok:active {
+  opacity: 0.85;
+}
+
+.pos-confirmar button:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* ---------- Toasts ---------- */
+.pos-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: min(560px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.pos-toast {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #1f2937;
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: pos-toast-in 0.18s ease-out;
+}
+
+.pos-toast-sucesso { background: var(--pos-acento); }
+.pos-toast-aviso { background: #b45309; }
+.pos-toast-erro { background: var(--pos-perigo); }
+
+@keyframes pos-toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Foco visivel (acessibilidade) ---------- */
+.pos button:focus-visible,
+.pos a:focus-visible,
+.pos input:focus-visible,
+.pos-modal button:focus-visible,
+.pos-sucesso button:focus-visible,
+.pos-sucesso a:focus-visible,
+.pos-falta button:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* ---------- Ecras estreitos / tablets em retrato ---------- */
+@media (max-width: 900px) {
+  .pos-corpo {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .pos-pesquisa {
+    flex-basis: 170px;
+  }
+}
+
+@media (max-width: 680px) {
+  .pos-corpo {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .pos-carrinho {
+    border-left: 0;
+    border-top: 1px solid var(--pos-borda);
+    max-height: 52vh;
+  }
+
+  .pos-filtros {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pos-pesquisa {
+    flex-basis: auto;
+  }
+
+  /* Em retrato o indicador ocupa a largura toda: continua legivel de relance. */
+  .pos-falta-btn {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pos-tile,
+  .pos-tile.is-tocado,
+  .pos-linha.is-nova,
+  .pos-toast {
+    animation: none;
+    transition: none;
+  }
+}

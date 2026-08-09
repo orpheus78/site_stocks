@@ -1,0 +1,97 @@
+<%#
+  Campos conforme validators em routes/artigos.routes.js:
+  nome, preco, categoria_id, ordem, stock_minimo, stock_inicial, unidade, ativo, imagem (multipart).
+  O preco e o valor final cobrado ao cliente.
+%>
+<h1 class="h4 mb-3"><%= titulo %></h1>
+
+<form method="post" action="<%= artigo ? '/admin/artigos/' + artigo.id : '/admin/artigos' %>"
+      enctype="multipart/form-data" class="row g-3" style="max-width: 760px;">
+
+  <div class="col-md-8">
+    <label class="form-label" for="nome">Nome</label>
+    <input class="form-control form-control-lg" id="nome" name="nome" maxlength="120" required
+           autofocus value="<%= artigo ? artigo.nome : '' %>">
+  </div>
+
+  <div class="col-md-4">
+    <label class="form-label" for="preco">Preco (€)</label>
+    <input type="number" step="0.01" min="0" inputmode="decimal" class="form-control form-control-lg"
+           id="preco" name="preco" required value="<%= artigo ? Number(artigo.preco) : '' %>">
+    <div class="form-text">Valor final cobrado ao cliente.</div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label" for="categoria_id">Categoria</label>
+    <select class="form-select" id="categoria_id" name="categoria_id">
+      <option value="">(sem categoria)</option>
+      <% categorias.forEach(function (c) { %>
+        <option value="<%= c.id %>" <%= artigo && Number(artigo.categoria_id) === Number(c.id) ? 'selected' : '' %>><%= c.nome %></option>
+      <% }); %>
+    </select>
+  </div>
+
+  <div class="col-md-3">
+    <label class="form-label" for="ordem">Ordem</label>
+    <input type="number" min="0" class="form-control" id="ordem" name="ordem" value="<%= artigo ? artigo.ordem : 0 %>">
+    <div class="form-text">Posicao no POS.</div>
+  </div>
+
+  <div class="col-md-3 d-flex align-items-center">
+    <div class="form-check form-switch mt-3">
+      <input type="checkbox" class="form-check-input" id="ativo" name="ativo" value="1"
+             <%= !artigo || artigo.ativo ? 'checked' : '' %>>
+      <label class="form-check-label" for="ativo">Ativo (visivel no POS)</label>
+    </div>
+  </div>
+
+  <div class="col-12"><hr class="my-1"><h2 class="h6 text-body-secondary mb-0">Stock</h2></div>
+
+  <div class="col-md-4">
+    <label class="form-label" for="stock_minimo">Stock minimo</label>
+    <input type="number" step="0.01" min="0" class="form-control" id="stock_minimo" name="stock_minimo"
+           value="<%= artigo && artigo.stock_minimo !== null ? Number(artigo.stock_minimo) : 0 %>">
+    <div class="form-text">Abaixo ou igual a este valor gera alerta.</div>
+  </div>
+
+  <div class="col-md-4">
+    <label class="form-label" for="unidade">Unidade</label>
+    <input class="form-control" id="unidade" name="unidade" maxlength="10"
+           value="<%= artigo && artigo.unidade ? artigo.unidade : 'un' %>">
+  </div>
+
+  <% if (!artigo) { %>
+    <div class="col-md-4">
+      <label class="form-label" for="stock_inicial">Stock inicial</label>
+      <input type="number" step="0.01" min="0" class="form-control" id="stock_inicial" name="stock_inicial" value="0">
+      <div class="form-text">Registado como entrada de stock.</div>
+    </div>
+  <% } %>
+
+  <div class="col-12"><hr class="my-1"><h2 class="h6 text-body-secondary mb-0">Imagem</h2></div>
+
+  <div class="col-md-7">
+    <label class="form-label" for="imagem">Ficheiro (JPEG/PNG/WEBP, max 2MB)</label>
+    <input type="file" class="form-control" id="imagem" name="imagem" accept="image/jpeg,image/png,image/webp">
+    <div class="form-text">Sem imagem, o POS mostra um botao com a cor da categoria.</div>
+  </div>
+
+  <div class="col-md-5 d-flex align-items-end gap-3">
+    <% if (artigo && artigo.imagem) { %>
+      <img src="/uploads/<%= artigo.imagem %>" alt="Imagem atual de <%= artigo.nome %>"
+           width="72" height="72" class="rounded object-fit-cover">
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input" id="remover_imagem" name="remover_imagem" value="1">
+        <label class="form-check-label" for="remover_imagem">Remover imagem</label>
+      </div>
+    <% } %>
+    <%# Pre-visualizacao do ficheiro escolhido, antes de submeter. %>
+    <img id="imagemPreview" alt="Pre-visualizacao da nova imagem" width="72" height="72"
+         class="rounded object-fit-cover border" hidden>
+  </div>
+
+  <div class="col-12 d-flex gap-2 pt-2">
+    <button class="btn btn-primary btn-toque px-4" type="submit"><i class="bi bi-check-lg" aria-hidden="true"></i> Guardar</button>
+    <a class="btn btn-outline-secondary btn-toque px-4" href="/admin/artigos">Cancelar</a>
+  </div>
+</form>

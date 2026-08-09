@@ -1,0 +1,81 @@
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Movimento #<%= venda.numero %></h1>
+  <span class="badge text-bg-<%= venda.estado === 'concluida' ? 'success' : 'danger' %>"><%= venda.estado %></span>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="table-responsive">
+      <table class="table tabela-compacta">
+        <thead>
+          <tr>
+            <th scope="col">Artigo</th><th scope="col" class="text-end">Preco</th>
+            <th scope="col" class="text-end">Qtd</th><th scope="col" class="text-end">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% itens.forEach(function (i) { %>
+            <tr>
+              <td><%= i.nome_snapshot %></td>
+              <td class="text-end"><%= eur(i.preco_unit) %></td>
+              <td class="text-end"><%= Number(i.quantidade) %></td>
+              <td class="text-end"><%= eur(i.subtotal) %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+        <tfoot>
+          <tr class="fw-bold fs-5">
+            <td colspan="3" class="text-end">TOTAL</td>
+            <td class="text-end"><%= eur(venda.total) %></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Movimento</h2>
+        <dl class="row mb-0 small">
+          <dt class="col-6">Data</dt><dd class="col-6 text-end"><%= dataHoraPT(venda.criado_em) %></dd>
+          <dt class="col-6">Operador</dt><dd class="col-6 text-end"><%= venda.utilizador_nome || '-' %></dd>
+          <%#
+            O metodo de pagamento saiu da LISTAGEM mas mantem-se aqui: o historico
+            anterior a conversao tem pagamentos reais e essa informacao continua a
+            ter de estar acessivel. Nos movimentos internos nao ha dinheiro nem troco.
+          %>
+          <dt class="col-6">Pagamento</dt>
+          <dd class="col-6 text-end">
+            <% if (venda.metodo_pagamento === 'interno') { %>
+              <span class="badge text-bg-secondary">movimento interno</span>
+            <% } else { %>
+              <%= venda.metodo_pagamento %> <span class="text-body-secondary">(historico)</span>
+            <% } %>
+          </dd>
+          <% if (venda.metodo_pagamento !== 'interno') { %>
+            <dt class="col-6">Dinheiro recebido</dt><dd class="col-6 text-end"><%= eur(venda.valor_dinheiro) %></dd>
+            <dt class="col-6">Multibanco</dt><dd class="col-6 text-end"><%= eur(venda.valor_multibanco) %></dd>
+            <dt class="col-6 fw-bold">Troco</dt><dd class="col-6 text-end fw-bold"><%= eur(venda.troco) %></dd>
+          <% } %>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mt-3">
+  <a class="btn btn-outline-secondary" href="/admin/vendas"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar</a>
+  <% if (venda.estado === 'concluida') { %>
+    <%# Confirmacao pelo modal da aplicacao (/js/confirmar.js): zero JS inline.
+        O que era "\n\n" na mensagem nativa e agora o paragrafo `detalhe`. %>
+    <form method="post" action="/admin/vendas/<%= venda.id %>/anular" class="d-inline"
+          data-confirmar="ANULAR o movimento #<%= venda.numero %> de <%= eur(venda.total) %>?"
+          data-confirmar-titulo="Anular movimento"
+          data-confirmar-detalhe="O stock dos artigos sera reposto. Esta accao nao pode ser desfeita."
+          data-confirmar-ok="Anular movimento"
+          data-confirmar-perigo="1">
+      <button class="btn btn-danger"><i class="bi bi-x-octagon" aria-hidden="true"></i> Anular movimento</button>
+    </form>
+  <% } %>
+</div>

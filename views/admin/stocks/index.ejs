@@ -1,0 +1,135 @@
+<%#
+  Stocks. Campos conforme routes/stocks.routes.js:
+   POST /admin/stocks/movimento           -> artigo_id, tipo (entrada|saida|ajuste), quantidade, motivo
+   POST /admin/stocks/:artigoId/parametros -> stock_minimo, unidade
+%>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-boxes" aria-hidden="true"></i> Stocks</h1>
+  <a class="btn btn-outline-secondary btn-sm" href="/admin/movimentos">
+    <i class="bi bi-clock-history" aria-hidden="true"></i> Ver movimentos
+  </a>
+</div>
+
+<form class="row g-2 mb-3 align-items-center" method="get">
+  <div class="col-sm-4">
+    <label class="visually-hidden" for="q">Pesquisar artigo</label>
+    <input class="form-control" id="q" name="q" placeholder="Pesquisar artigo" value="<%= termo || '' %>">
+  </div>
+  <div class="col-auto">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="baixo" name="baixo" value="1" <%= apenasBaixo ? 'checked' : '' %>>
+      <label class="form-check-label" for="baixo">Apenas stock baixo</label>
+    </div>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-primary">Filtrar</button></div>
+  <% if (termo || apenasBaixo) { %>
+    <div class="col-auto"><a class="btn btn-link" href="/admin/stocks">Limpar filtros</a></div>
+  <% } %>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-hover tabela-compacta align-middle">
+    <thead>
+      <tr>
+        <th scope="col">Artigo</th><th scope="col">Categoria</th>
+        <th scope="col" class="text-end">Stock</th><th scope="col" class="text-end">Minimo</th>
+        <th scope="col">Atualizado</th><th scope="col">Parametros</th><th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% stocks.forEach(function (s) { %>
+        <% var qtd = Number(s.quantidade); var minimo = Number(s.stock_minimo); var baixo = qtd <= minimo; %>
+        <tr class="<%= baixo ? 'table-danger' : '' %>">
+          <td class="fw-semibold">
+            <%= s.artigo_nome %>
+            <% if (!s.artigo_ativo) { %><span class="badge text-bg-secondary">inativo</span><% } %>
+          </td>
+          <td>
+            <% if (s.categoria_nome) { %>
+              <span class="badge" style="background: <%= s.categoria_cor || '#6c757d' %>"><%= s.categoria_nome %></span>
+            <% } else { %><span class="text-body-secondary">-</span><% } %>
+          </td>
+          <td class="text-end">
+            <span class="fw-bold <%= qtd < 0 ? 'text-danger' : '' %>"><%= qtd %></span> <%= s.unidade %>
+            <% if (qtd < 0) { %>
+              <i class="bi bi-exclamation-triangle-fill text-danger" title="Stock negativo" aria-label="Stock negativo"></i>
+            <% } %>
+          </td>
+          <td class="text-end"><%= minimo %></td>
+          <td class="small text-body-secondary"><%= dataHoraPT(s.atualizado_em) %></td>
+          <td>
+            <form method="post" action="/admin/stocks/<%= s.artigo_id %>/parametros" class="d-flex gap-1">
+              <label class="visually-hidden" for="min<%= s.artigo_id %>">Stock minimo de <%= s.artigo_nome %></label>
+              <input type="number" step="0.01" min="0" class="form-control form-control-sm" style="width:80px"
+                     id="min<%= s.artigo_id %>" name="stock_minimo" value="<%= minimo %>">
+              <label class="visually-hidden" for="uni<%= s.artigo_id %>">Unidade de <%= s.artigo_nome %></label>
+              <input class="form-control form-control-sm" style="width:70px" id="uni<%= s.artigo_id %>"
+                     name="unidade" value="<%= s.unidade %>" required maxlength="10">
+              <button class="btn btn-outline-secondary btn-sm" aria-label="Guardar parametros de <%= s.artigo_nome %>">
+                <i class="bi bi-save" aria-hidden="true"></i>
+              </button>
+            </form>
+          </td>
+          <td class="text-end text-nowrap">
+            <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#modalMovimentoStock"
+                    data-artigo-id="<%= s.artigo_id %>" data-artigo-nome="<%= s.artigo_nome %>"
+                    data-tipo="entrada" data-quantidade="<%= qtd %>"
+                    aria-label="Entrada de stock de <%= s.artigo_nome %>">
+              <i class="bi bi-plus-lg" aria-hidden="true"></i> Entrada
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#modalMovimentoStock"
+                    data-artigo-id="<%= s.artigo_id %>" data-artigo-nome="<%= s.artigo_nome %>"
+                    data-tipo="ajuste" data-quantidade="<%= qtd %>"
+                    aria-label="Ajustar stock de <%= s.artigo_nome %>">
+              <i class="bi bi-sliders" aria-hidden="true"></i> Ajustar
+            </button>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (!stocks.length) { %>
+        <tr data-sem-dados="1"><td colspan="7" class="text-body-secondary">Sem registos para este filtro.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<!-- Modal de entrada / ajuste rapido de stock -->
+<div class="modal fade" id="modalMovimentoStock" tabindex="-1" aria-labelledby="movTitulo" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" method="post" action="/admin/stocks/movimento">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="movTitulo">Movimento de stock</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" name="artigo_id" id="movArtigoId">
+        <p class="mb-3">Artigo: <strong id="movArtigoNome"></strong></p>
+
+        <div class="mb-3">
+          <label class="form-label" for="movTipo">Tipo</label>
+          <select class="form-select" id="movTipo" name="tipo" required>
+            <option value="entrada">Entrada (somar)</option>
+            <option value="saida">Saida (subtrair)</option>
+            <option value="ajuste">Ajuste (valor final)</option>
+          </select>
+          <div class="form-text" id="movAjuda"></div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="movQuantidade">Quantidade</label>
+          <input type="number" step="0.01" class="form-control form-control-lg" id="movQuantidade"
+                 name="quantidade" required inputmode="decimal">
+        </div>
+
+        <div class="mb-1">
+          <label class="form-label" for="movMotivo">Motivo</label>
+          <input class="form-control" id="movMotivo" name="motivo" maxlength="255" placeholder="Ex.: compra no fornecedor">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Registar movimento</button>
+      </div>
+    </form>
+  </div>
+</div>

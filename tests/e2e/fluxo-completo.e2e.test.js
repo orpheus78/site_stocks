@@ -1,0 +1,922 @@
+'use strict';
+
+/**
+ * Testes end-to-end contra uma MariaDB REAL (contentor Docker).
+ *
+ * Cobrem o fluxo completo do bar: login -> abertura de caixa -> vendas ->
+ * talao -> anulacao -> movimentos de caixa -> fecho -> backoffice -> relatorios,
+ * sempre com asserçoes diretas na base de dados (nao apenas na resposta HTTP).
+ *
+ * SEGURANCA / ISOLAMENTO
+ *  - Corre sempre contra uma base de dados DEDICADA (TEST_DB_NAME, ex. `bar_test`),
+ *    criada no inicio e ELIMINADA no fim. Nunca toca na BD de desenvolvimento.
+ *  - Recusa-se a correr se a BD de teste tiver o mesmo nome da de desenvolvimento.
+ *  - Credenciais lidas exclusivamente do ambiente (.env), nunca hardcoded.
+ *
+ * SKIP AUTOMATICO
+ *  - Se nao houver MariaDB acessivel, o teste faz skip em vez de falhar, para
+ *    que `npm test` continue a funcionar em maquinas sem Docker.
+ *
+ * REGRA DE NEGOCIO CENTRAL: nao existe IVA. O preco do artigo e o valor final.
+ */
+
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+require('dotenv').config();
+
+const RAIZ = path.join(__dirname, '..', '..');
+
+// --- Configuracao da BD de teste (antes de qualquer require da aplicacao) ----
+const TEST_DB = {
+  host: process.env.TEST_DB_HOST || process.env.DB_HOST || '127.0.0.1',
+  port: Number(process.env.TEST_DB_PORT || process.env.DB_PORT || 3306),
+  user: process.env.TEST_DB_USER || process.env.DB_USER || 'root',
+  password: process.env.TEST_DB_PASSWORD || process.env.DB_PASSWORD || '',
+  database: process.env.TEST_DB_NAME || 'bar_test'
+};
+
+const BD_DESENVOLVIMENTO = process.env.DB_NAME || 'bar_campo';
+if (TEST_DB.database === BD_DESENVOLVIMENTO) {
+  throw new Error(
+    `TEST_DB_NAME (${TEST_DB.database}) e igual a DB_NAME. Os testes E2E nunca podem correr contra a BD de desenvolvimento.`
+  );
+}
+
+// A aplicacao e os scripts db/* leem DB_*. Redireciona-os para a BD de teste.
+// `dotenv` nao sobrepoe variaveis ja definidas, por isso isto e definitivo.
+const AMBIENTE_TESTE = {
+  ...process.env,
+  DB_HOST: TEST_DB.host,
+  DB_PORT: String(TEST_DB.port),
+  DB_USER: TEST_DB.user,
+  DB_PASSWORD: TEST_DB.password,
+  DB_NAME: TEST_DB.database,
+  NODE_ENV: 'development'
+};
+Object.assign(process.env, {
+  DB_HOST: AMBIENTE_TESTE.DB_HOST,
+  DB_PORT: AMBIENTE_TESTE.DB_PORT,
+  DB_USER: AMBIENTE_TESTE.DB_USER,
+  DB_PASSWORD: AMBIENTE_TESTE.DB_PASSWORD,
+  DB_NAME: AMBIENTE_TESTE.DB_NAME
+});
+
+const mariadb = require('mariadb');
+const request = require('supertest');
+
+// Credenciais do seed (db/seed.js). Sobreponiveis por ambiente, tal como o seed.
+const ADMIN = {
+  username: process.env.SEED_ADMIN_USERNAME || 'admin',
+  password: process.env.SEED_ADMIN_PASSWORD || 'admin123',
+  pin: process.env.SEED_ADMIN_PIN || '1234'
+};
+
+// Perfil de venda: so tem acesso ao POS.
+const FUNCIONARIO = {
+  username: process.env.SEED_BAR_USERNAME || 'bar',
+  password: process.env.SEED_BAR_PASSWORD || 'bar123',
+  pin: process.env.SEED_BAR_PIN || '4321'
+};
+
+/** PNG 1x1 valido, para o teste de upload (evita depender de ficheiros externos). */
+const PNG_1X1 = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+/** Ligacao direta a BD para asserçoes, com as mesmas opcoes de tipos da app. */
+function ligar(database) {
+  return mariadb.createConnection({
+    host: TEST_DB.host,
+    port: TEST_DB.port,
+    user: TEST_DB.user,
+    password: TEST_DB.password,
+    database,
+    connectTimeout: 5000,
+    decimalAsNumber: true,
+    bigIntAsNumber: true,
+    insertIdAsNumber: true
+  });
+}
+
+async function mariadbDisponivel() {
+  let conn;
+  try {
+    conn = await ligar(undefined);
+    await conn.query('SELECT 1');
+    return true;
+  } catch (err) {
+    console.warn(`[e2e] MariaDB indisponivel em ${TEST_DB.host}:${TEST_DB.port} -> ${err.message}`);
+    return false;
+  } finally {
+    if (conn) await conn.end().catch(() => {});
+  }
+}
+
+function correrScript(ficheiro) {
+  return execFileSync(process.execPath, [path.join('db', ficheiro)], {
+    cwd: RAIZ,
+    env: AMBIENTE_TESTE,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+}
+
+test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
+  if (!(await mariadbDisponivel())) {
+    t.skip(
+      `MariaDB de teste indisponivel em ${TEST_DB.host}:${TEST_DB.port}. ` +
+        'Arrancar com `npm run db:up` para correr os testes E2E.'
+    );
+    return;
+  }
+
+  // --- Preparacao: BD de teste limpa + schema + seed (reutiliza db/*.js) -----
+  let admin = await ligar(undefined);
+  await admin.query(`DROP DATABASE IF EXISTS \`${TEST_DB.database}\``);
+  await admin.end();
+
+  correrScript('apply-schema.js');
+  correrScript('seed.js');
+
+  const bd = await ligar(TEST_DB.database);
+  const app = require('../../src/app');
+  const relatoriosRepo = require('../../src/repositories/relatorios.repo');
+  const caixaService = require('../../src/services/caixa.service');
+  const env = require('../../src/config/env');
+
+  const uma = (sql, params = []) => bd.query(sql, params).then((r) => r[0] || null);
+  const artigoPorNome = (nome) =>
+    uma(
+      'SELECT a.id, a.nome, a.preco, s.quantidade, s.stock_minimo FROM artigos a JOIN stocks s ON s.artigo_id = a.id WHERE a.nome = ?',
+      [nome]
+    );
+
+  const ficheirosUpload = [];
+  let sessaoCaixaId = null;
+  let vendaAnulavel = null;
+  let vendaMultibanco = null;
+  let vendaDinheiro = null;
+
+  try {
+    // Sanidade da preparacao: as 9 tabelas do schema e o seed aplicado.
+    await t.test('Preparacao: schema com 9 tabelas e seed aplicado', async () => {
+      const tabelas = await bd.query(
+        'SELECT table_name AS nome FROM information_schema.tables WHERE table_schema = ? ORDER BY table_name',
+        [TEST_DB.database]
+      );
+      assert.deepEqual(
+        tabelas.map((r) => r.nome).sort(),
+        [
+          'artigos',
+          'categorias',
+          'movimentos_caixa',
+          'movimentos_stock',
+          'sessoes_caixa',
+          'stocks',
+          'utilizadores',
+          'venda_itens',
+          'vendas'
+        ]
+      );
+
+      const contagens = await uma(
+        `SELECT (SELECT COUNT(*) FROM utilizadores) AS utilizadores,
+                (SELECT COUNT(*) FROM categorias)   AS categorias,
+                (SELECT COUNT(*) FROM artigos)      AS artigos,
+                (SELECT COUNT(*) FROM stocks)       AS stocks`
+      );
+      assert.equal(contagens.utilizadores, 2); // admin + funcionario
+      assert.equal(contagens.categorias, 6);
+      assert.equal(contagens.artigos, 24);
+      assert.equal(contagens.stocks, 24);
+    });
+
+    // --- 1. Login (password) e login por PIN no POS -------------------------
+    const agente = request.agent(app);
+
+    await t.test('1a. Login com o utilizador do seed cria sessao', async () => {
+      const res = await agente
+        .post('/login')
+        .type('form')
+        .send({ username: ADMIN.username, password: ADMIN.password });
+
+      assert.equal(res.status, 302);
+      // O admin entra no backoffice; o funcionario iria para /pos (ver 1c).
+      assert.equal(res.headers.location, '/admin');
+
+      // A sessao esta mesmo activa: o POS responde sem redirecionar para /login.
+      const pos = await agente.get('/pos');
+      assert.equal(pos.status, 200);
+    });
+
+    await t.test('1b. Login por PIN no POS autentica o mesmo utilizador', async () => {
+      const agentePin = request.agent(app);
+      const res = await agentePin.post('/pos/pin').type('form').send({ pin: ADMIN.pin });
+
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/pos');
+
+      const catalogo = await agentePin.get('/api/pos/artigos');
+      assert.equal(catalogo.status, 200);
+      assert.equal(catalogo.body.categorias.length, 6);
+      assert.equal(catalogo.body.artigos.length, 24);
+
+      // PIN errado nao autentica: volta ao /login com aviso e sem sessao.
+      const agenteMau = request.agent(app);
+      const mau = await agenteMau.post('/pos/pin').type('form').send({ pin: '9999' });
+      assert.equal(mau.status, 302);
+      assert.equal(mau.headers.location, '/login');
+
+      const paginaLogin = await agenteMau.get('/login');
+      assert.equal(paginaLogin.status, 200);
+      assert.ok(paginaLogin.text.includes('PIN invalido.'), 'a pagina devia mostrar o aviso de PIN invalido');
+
+      // E continua sem acesso ao POS.
+      const bloqueado = await agenteMau.get('/api/pos/artigos');
+      assert.equal(bloqueado.status, 401);
+    });
+
+    // --- 2. Abertura de caixa ----------------------------------------------
+    await t.test('2. Abrir sessao de caixa com fundo inicial de 50.00', async () => {
+      const res = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '50.00' });
+      assert.equal(res.status, 302);
+
+      const sessao = await uma("SELECT * FROM sessoes_caixa WHERE estado = 'aberta'");
+      assert.ok(sessao, 'devia existir uma sessao de caixa aberta');
+      assert.equal(sessao.fundo_inicial, 50);
+      assert.equal(sessao.fechada_em, null);
+      sessaoCaixaId = sessao.id;
+    });
+
+    // --- 3. Venda com varios artigos ---------------------------------------
+    await t.test('3. POST /api/vendas desconta stock e grava tudo corretamente', async () => {
+      const cafe = await artigoPorNome('Cafe'); // 0.70, stock 200
+      const imperial = await artigoPorNome('Imperial'); // 1.20, stock 150
+      assert.equal(cafe.preco, 0.7);
+      assert.equal(cafe.quantidade, 200);
+      assert.equal(imperial.preco, 1.2);
+      assert.equal(imperial.quantidade, 150);
+
+      // 3 x 0.70 = 2.10 ; 2 x 1.20 = 2.40 ; total = 4.50 (sem IVA)
+      // Cliente entrega 5.00 -> troco 0.50
+      const res = await agente.post('/api/vendas').send({
+        itens: [
+          { artigo_id: cafe.id, quantidade: 3 },
+          { artigo_id: imperial.id, quantidade: 2 }
+        ],
+        metodo_pagamento: 'dinheiro',
+        valor_dinheiro: 5
+      });
+
+      assert.equal(res.status, 201);
+      assert.equal(res.body.venda.total, 4.5);
+      assert.equal(res.body.venda.troco, 0.5);
+      assert.equal(res.body.venda.valor_dinheiro, 5);
+      assert.equal(res.body.venda.valor_multibanco, 0);
+      assert.deepEqual(res.body.avisos, []);
+
+      vendaAnulavel = res.body.venda;
+
+      // Stock decrementado EXATAMENTE.
+      assert.equal((await artigoPorNome('Cafe')).quantidade, 197);
+      assert.equal((await artigoPorNome('Imperial')).quantidade, 148);
+
+      // Movimentos de stock do tipo 'venda' com quantidade_apos correto.
+      const movCafe = await uma(
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        [cafe.id]
+      );
+      assert.equal(movCafe.quantidade, 3);
+      assert.equal(movCafe.quantidade_apos, 197);
+      assert.equal(movCafe.motivo, `Movimento #${vendaAnulavel.numero}`);
+
+      const movImperial = await uma(
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        [imperial.id]
+      );
+      assert.equal(movImperial.quantidade, 2);
+      assert.equal(movImperial.quantidade_apos, 148);
+
+      // Cabecalho da venda gravado e associado a sessao de caixa aberta.
+      const venda = await uma('SELECT * FROM vendas WHERE id = ?', [vendaAnulavel.id]);
+      assert.equal(venda.total, 4.5);
+      assert.equal(venda.troco, 0.5);
+      assert.equal(venda.estado, 'concluida');
+      assert.equal(venda.metodo_pagamento, 'dinheiro');
+      assert.equal(venda.sessao_caixa_id, sessaoCaixaId);
+
+      // Itens com snapshot de nome e preco unitario.
+      const itens = await bd.query('SELECT * FROM venda_itens WHERE venda_id = ? ORDER BY id', [
+        vendaAnulavel.id
+      ]);
+      assert.equal(itens.length, 2);
+      assert.equal(itens[0].nome_snapshot, 'Cafe');
+      assert.equal(itens[0].preco_unit, 0.7);
+      assert.equal(itens[0].quantidade, 3);
+      assert.equal(itens[0].subtotal, 2.1);
+      assert.equal(itens[1].nome_snapshot, 'Imperial');
+      assert.equal(itens[1].preco_unit, 1.2);
+      assert.equal(itens[1].subtotal, 2.4);
+    });
+
+    // --- 4. Stock negativo: avisa, nunca bloqueia ---------------------------
+    await t.test('4. Venda acima do stock nao e bloqueada e devolve avisos', async () => {
+      const gelado = await artigoPorNome('Gelado premium'); // 2.50, stock 20
+      assert.equal(gelado.quantidade, 20);
+
+      // 25 unidades com apenas 20 em stock -> -5, mas a venda tem de passar.
+      const res = await agente.post('/api/vendas').send({
+        itens: [{ artigo_id: gelado.id, quantidade: 25 }],
+        metodo_pagamento: 'multibanco'
+      });
+
+      assert.equal(res.status, 201, 'a venda nunca pode ser bloqueada por falta de stock');
+      assert.equal(res.body.venda.total, 62.5);
+      assert.equal(res.body.venda.valor_multibanco, 62.5);
+      assert.equal(res.body.venda.valor_dinheiro, 0);
+      assert.equal(res.body.venda.troco, 0, 'nao ha troco em multibanco');
+
+      assert.ok(Array.isArray(res.body.avisos) && res.body.avisos.length === 1, 'devia trazer 1 aviso');
+      assert.match(res.body.avisos[0], /Gelado premium/);
+      assert.match(res.body.avisos[0], /negativo/i);
+
+      vendaMultibanco = res.body.venda;
+
+      // O stock ficou mesmo negativo e o movimento foi registado.
+      assert.equal((await artigoPorNome('Gelado premium')).quantidade, -5);
+      const mov = await uma(
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        [gelado.id]
+      );
+      assert.equal(mov.quantidade_apos, -5);
+    });
+
+    // --- 5. Preco adulterado pelo cliente ----------------------------------
+    await t.test('5. Preco enviado pelo cliente e ignorado: vale o preco da BD', async () => {
+      const cola = await artigoPorNome('Coca-Cola'); // 1.50
+      assert.equal(cola.preco, 1.5);
+
+      const res = await agente.post('/api/vendas').send({
+        itens: [{ artigo_id: cola.id, quantidade: 2, preco: 0.01, preco_unit: 0.01, subtotal: 0.02 }],
+        metodo_pagamento: 'dinheiro'
+      });
+
+      assert.equal(res.status, 201);
+      // 2 x 1.50 = 3.00 (preco da BD), nunca 2 x 0.01 = 0.02.
+      assert.equal(res.body.venda.total, 3);
+      assert.equal(res.body.venda.troco, 0);
+
+      vendaDinheiro = res.body.venda;
+
+      const item = await uma('SELECT * FROM venda_itens WHERE venda_id = ?', [vendaDinheiro.id]);
+      assert.equal(item.preco_unit, 1.5, 'o preco gravado tem de ser o da BD');
+      assert.equal(item.subtotal, 3);
+    });
+
+    // --- 6. Talao ----------------------------------------------------------
+    await t.test('6. GET /pos/venda/:id/talao renderiza o talao com o total', async () => {
+      const res = await agente.get(`/pos/venda/${vendaAnulavel.id}/talao`);
+
+      assert.equal(res.status, 200);
+      assert.match(res.headers['content-type'], /html/);
+      assert.ok(res.text.includes('4.50'), 'o talao tem de mostrar o total 4.50');
+      assert.ok(res.text.includes(`#${vendaAnulavel.numero}`), 'o talao tem de mostrar o numero da venda');
+      assert.ok(res.text.includes('Cafe'));
+      assert.ok(res.text.includes('Imperial'));
+    });
+
+    // --- 7. Anulacao de venda ----------------------------------------------
+    await t.test('7. Anular venda repoe o stock e marca a venda como anulada', async () => {
+      const res = await agente.post(`/admin/vendas/${vendaAnulavel.id}/anular`).type('form').send({});
+      assert.equal(res.status, 302);
+
+      const venda = await uma('SELECT * FROM vendas WHERE id = ?', [vendaAnulavel.id]);
+      assert.equal(venda.estado, 'anulada');
+
+      // Stock reposto exatamente aos valores originais do seed.
+      assert.equal((await artigoPorNome('Cafe')).quantidade, 200);
+      assert.equal((await artigoPorNome('Imperial')).quantidade, 150);
+
+      // Reposicao registada como movimento de 'entrada'.
+      const cafe = await artigoPorNome('Cafe');
+      const mov = await uma(
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'entrada' ORDER BY id DESC LIMIT 1",
+        [cafe.id]
+      );
+      assert.equal(mov.quantidade, 3);
+      assert.equal(mov.quantidade_apos, 200);
+      assert.equal(mov.motivo, `Anulacao do movimento #${vendaAnulavel.numero}`);
+
+      // Anular duas vezes e conflito.
+      const repetida = await agente
+        .post(`/admin/vendas/${vendaAnulavel.id}/anular`)
+        .set('Accept', 'application/json')
+        .send({});
+      assert.equal(repetida.status, 409);
+    });
+
+    // --- 8. Movimentos de caixa e fecho ------------------------------------
+    await t.test('8. Fecho de caixa: multibanco nao entra no esperado', async () => {
+      await agente
+        .post('/caixa/movimento')
+        .type('form')
+        .send({ tipo: 'entrada', valor: '10.00', descricao: 'Reforco de trocos' });
+
+      await agente
+        .post('/caixa/movimento')
+        .type('form')
+        .send({ tipo: 'sangria', valor: '20.00', descricao: 'Deposito no cofre' });
+
+      const movimentos = await bd.query('SELECT * FROM movimentos_caixa WHERE sessao_caixa_id = ? ORDER BY id', [
+        sessaoCaixaId
+      ]);
+      assert.equal(movimentos.length, 2);
+      assert.equal(movimentos[0].tipo, 'entrada');
+      assert.equal(movimentos[0].valor, 10);
+      assert.equal(movimentos[1].tipo, 'sangria');
+      assert.equal(movimentos[1].valor, 20);
+
+      // Vendas concluidas na sessao: a de multibanco (62.50) e a de dinheiro (3.00).
+      // A primeira venda (4.50) foi anulada e NAO conta.
+      const estado = await caixaService.estadoAtual();
+      assert.equal(estado.resumo.n_vendas, 2);
+      assert.equal(estado.resumo.vendas_dinheiro, 3);
+      assert.equal(estado.resumo.vendas_multibanco, 62.5);
+      assert.equal(estado.resumo.fundo_inicial, 50);
+      assert.equal(estado.resumo.entradas, 10);
+      assert.equal(estado.resumo.saidas, 0);
+      assert.equal(estado.resumo.sangrias, 20);
+
+      // esperado = 50 (fundo) + 3.00 (vendas em dinheiro) + 10 (entradas) - 20 (sangria) = 43.00
+      // Nao ha movimentos internos nesta sessao, logo o agregado `interno` e 0.
+      // Os 62.50 de multibanco NAO entram no dinheiro fisico em caixa.
+      assert.equal(estado.resumo.movimentos_internos, 0);
+      assert.equal(estado.resumo.esperado, 43);
+      assert.notEqual(estado.resumo.esperado, 43 + 62.5, 'multibanco nao pode entrar no esperado');
+
+      // Fecho com 40.00 contados -> diferenca de -3.00.
+      const res = await agente.post('/caixa/fechar').type('form').send({ total_contado: '40.00' });
+      assert.equal(res.status, 302);
+
+      const sessao = await uma('SELECT * FROM sessoes_caixa WHERE id = ?', [sessaoCaixaId]);
+      assert.equal(sessao.estado, 'fechada');
+      assert.equal(sessao.total_contado, 40);
+      assert.equal(sessao.diferenca, -3);
+      assert.ok(sessao.fechada_em instanceof Date);
+    });
+
+    // --- 9. Upload de imagem via multer -------------------------------------
+    await t.test('9. Criar artigo com upload de imagem guarda ficheiro e caminho na BD', async () => {
+      const categoria = await uma("SELECT id FROM categorias WHERE nome = 'Snacks'");
+
+      const res = await agente
+        .post('/admin/artigos')
+        .field('nome', 'Bolo caseiro')
+        .field('preco', '1.75')
+        .field('categoria_id', String(categoria.id))
+        .field('ativo', 'on')
+        .field('stock_inicial', '10')
+        .field('stock_minimo', '2')
+        .field('unidade', 'un')
+        .attach('imagem', PNG_1X1, { filename: 'bolo.png', contentType: 'image/png' });
+
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/admin/artigos');
+
+      const artigo = await uma('SELECT * FROM artigos WHERE nome = ?', ['Bolo caseiro']);
+      assert.ok(artigo, 'o artigo devia ter sido criado');
+      assert.equal(artigo.preco, 1.75);
+      assert.ok(artigo.imagem, 'o nome do ficheiro devia ficar gravado na BD');
+      assert.match(artigo.imagem, /^[0-9a-f]{32}\.png$/, 'nome aleatorio, sem o nome original do cliente');
+
+      // O ficheiro existe mesmo em disco, com o conteudo enviado.
+      const caminho = path.join(env.uploads.dir, artigo.imagem);
+      ficheirosUpload.push(caminho);
+      assert.ok(fs.existsSync(caminho), `ficheiro ${caminho} devia existir`);
+      assert.deepEqual(fs.readFileSync(caminho), PNG_1X1);
+
+      // Stock inicial aplicado com o respetivo movimento.
+      const stock = await uma('SELECT * FROM stocks WHERE artigo_id = ?', [artigo.id]);
+      assert.equal(stock.quantidade, 10);
+      assert.equal(stock.stock_minimo, 2);
+
+      // Ficheiro de tipo nao permitido e recusado (e nada e gravado).
+      const recusado = await agente
+        .post('/admin/artigos')
+        .field('nome', 'Artigo com PDF')
+        .field('preco', '1.00')
+        .attach('imagem', Buffer.from('%PDF-1.4'), { filename: 'x.pdf', contentType: 'application/pdf' });
+      assert.equal(recusado.status, 302);
+      assert.equal(await uma('SELECT id FROM artigos WHERE nome = ?', ['Artigo com PDF']), null);
+    });
+
+    // --- 10. Relatorios -----------------------------------------------------
+    await t.test('10. Relatorios batem certo com os numeros conferidos a mao', async () => {
+      const hoje = require('../../src/utils').hojeISO();
+
+      // Vendas concluidas de hoje: 62.50 (multibanco) + 3.00 (dinheiro) = 65.50.
+      // A venda de 4.50 esta anulada e nao conta em lado nenhum.
+      const resumo = await relatoriosRepo.resumoVendas(hoje, hoje);
+      assert.equal(resumo.n_vendas, 2);
+      assert.equal(resumo.total, 65.5);
+      assert.equal(resumo.dinheiro, 3);
+      assert.equal(resumo.multibanco, 62.5);
+      assert.equal(resumo.ticket_medio, 32.75); // 65.50 / 2
+
+      // Top artigos: 25 x Gelado premium, 2 x Coca-Cola. Nada da venda anulada.
+      const top = await relatoriosRepo.topArtigos(hoje, hoje, 10);
+      assert.equal(top.length, 2);
+      assert.equal(top[0].nome, 'Gelado premium');
+      assert.equal(Number(top[0].quantidade), 25);
+      assert.equal(Number(top[0].total), 62.5);
+      assert.equal(top[1].nome, 'Coca-Cola');
+      assert.equal(Number(top[1].quantidade), 2);
+      assert.equal(Number(top[1].total), 3);
+      assert.ok(!top.some((a) => a.nome === 'Cafe'), 'a venda anulada nao pode aparecer no top');
+
+      // Stock baixo: so o Gelado premium (-5 <= 5). Todos os outros estao acima do minimo.
+      const stocksRepo = require('../../src/repositories/stocks.repo');
+      const baixo = await stocksRepo.alertasStockBaixo();
+      assert.equal(baixo.length, 1);
+      assert.equal(baixo[0].artigo_nome, 'Gelado premium');
+      assert.equal(Number(baixo[0].quantidade), -5);
+
+      // Vendas por categoria: Gelados 62.50 e Bebidas 3.00.
+      const porCategoria = await relatoriosRepo.vendasPorCategoria(hoje, hoje);
+      const mapa = new Map(porCategoria.map((c) => [c.categoria, Number(c.total)]));
+      assert.equal(mapa.get('Gelados'), 62.5);
+      assert.equal(mapa.get('Bebidas'), 3);
+      assert.equal(mapa.size, 2);
+    });
+
+    // --- 11. Separacao de perfis: funcionario so vende ----------------------
+    await t.test('11. Funcionario vende numa caixa aberta pelo admin, sem acesso a gestao', async () => {
+      const funcionarioBd = await uma('SELECT id, role FROM utilizadores WHERE username = ?', [
+        FUNCIONARIO.username
+      ]);
+      assert.ok(funcionarioBd, 'o seed devia ter criado o utilizador de venda');
+      assert.equal(funcionarioBd.role, 'funcionario');
+
+      // O responsavel abre a caixa (a anterior foi fechada no passo 8).
+      const abertura = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '25.00' });
+      assert.equal(abertura.status, 302);
+      const sessaoNova = await uma("SELECT id FROM sessoes_caixa WHERE estado = 'aberta'");
+      assert.ok(sessaoNova, 'o admin devia ter aberto uma nova sessao de caixa');
+
+      // O funcionario entra e cai no POS (nunca no backoffice).
+      const balcao = request.agent(app);
+      const login = await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+      assert.equal(login.status, 302);
+      assert.equal(login.headers.location, '/pos');
+
+      // Gestao e caixa estao vedadas -- 403, nao redirect para /login.
+      for (const rota of ['/admin', '/admin/artigos', '/admin/relatorios', '/caixa']) {
+        const bloqueado = await balcao.get(rota);
+        assert.equal(bloqueado.status, 403, `${rota} devia dar 403 ao funcionario`);
+      }
+      const sangria = await balcao
+        .post('/caixa/movimento')
+        .type('form')
+        .send({ tipo: 'sangria', valor: '10.00', descricao: 'tentativa' });
+      assert.equal(sangria.status, 403);
+
+      // Mas o POS funciona: catalogo + venda associada a caixa aberta pelo admin.
+      const catalogo = await balcao.get('/api/pos/artigos');
+      assert.equal(catalogo.status, 200);
+
+      const agua = await artigoPorNome('Agua 0.5L'); // 0.80
+      const stockAntes = Number(agua.quantidade);
+
+      const venda = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: agua.id, quantidade: 2 }],
+        metodo_pagamento: 'dinheiro',
+        valor_dinheiro: 2
+      });
+
+      assert.equal(venda.status, 201);
+      assert.equal(venda.body.venda.total, 1.6);
+      assert.equal(venda.body.venda.troco, 0.4);
+
+      // Gravada em nome do funcionario e no turno aberto pelo admin.
+      const gravada = await uma('SELECT * FROM vendas WHERE id = ?', [venda.body.venda.id]);
+      assert.equal(gravada.utilizador_id, funcionarioBd.id);
+      assert.equal(gravada.sessao_caixa_id, sessaoNova.id);
+      assert.equal(gravada.estado, 'concluida');
+
+      // E o stock foi descontado na mesma.
+      assert.equal(Number((await artigoPorNome('Agua 0.5L')).quantidade), stockAntes - 2);
+
+      // O fecho continua a ser do responsavel.
+      const fecho = await agente.post('/caixa/fechar').type('form').send({ total_contado: '26.60' });
+      assert.equal(fecho.status, 302);
+    });
+
+    // --- 12. Alerta de stock baixo no POS -----------------------------------
+    // ACRESCENTADO NO FIM de proposito: os totais dos passos anteriores estao
+    // verificados a mao e nao podem ser invalidados por vendas extra.
+    await t.test('12. POS sinaliza stock baixo no catalogo e avisa ao concluir a venda', async () => {
+      const balcao = request.agent(app);
+      const login = await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+      assert.equal(login.status, 302);
+
+      // Given: Tremocos tem minimo 8 no seed. Coloca-se o stock em 10 (acima
+      // do minimo) para que seja a VENDA a empurra-lo para baixo do minimo.
+      const tremocos = await artigoPorNome('Tremocos');
+      assert.equal(Number(tremocos.stock_minimo), 8);
+      await bd.query('UPDATE stocks SET quantidade = 10 WHERE artigo_id = ?', [tremocos.id]);
+
+      // O catalogo expoe o minimo e ainda nao ha alerta.
+      const antes = await balcao.get('/api/pos/artigos');
+      assert.equal(antes.status, 200);
+      const artigoAntes = antes.body.artigos.find((a) => a.nome === 'Tremocos');
+      assert.equal(artigoAntes.stock, 10);
+      assert.equal(artigoAntes.stock_minimo, 8);
+      assert.equal(artigoAntes.stock_baixo, false);
+
+      // When: vende 3 -> fica com 7, abaixo do minimo de 8.
+      const venda = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: tremocos.id, quantidade: 3 }],
+        metodo_pagamento: 'multibanco'
+      });
+
+      // Then: a venda passa e traz um aviso classificado como stock_baixo.
+      assert.equal(venda.status, 201, 'o alerta de stock nunca pode bloquear a venda');
+      assert.equal(venda.body.venda.total, 4.5); // 3 x 1.50
+      assert.equal(venda.body.avisos_stock.length, 1);
+      assert.equal(venda.body.avisos_stock[0].tipo, 'stock_baixo');
+      assert.equal(venda.body.avisos_stock[0].artigo, 'Tremocos');
+      assert.equal(venda.body.avisos_stock[0].quantidade, 7);
+      assert.equal(venda.body.avisos_stock[0].stock_minimo, 8);
+      assert.match(venda.body.avisos[0], /Tremocos/);
+
+      // E o catalogo passa a sinalizar o artigo (o POS refresca apos a venda).
+      const depois = await balcao.get('/api/pos/artigos');
+      const artigoDepois = depois.body.artigos.find((a) => a.nome === 'Tremocos');
+      assert.equal(artigoDepois.stock, 7);
+      assert.equal(artigoDepois.stock_baixo, true);
+
+      // A regra do POS e a MESMA do backoffice: o artigo aparece nos alertas
+      // de /admin/stocks (que consulta quantidade <= stock_minimo na BD).
+      const emFalta = await bd.query(
+        'SELECT a.nome FROM stocks s JOIN artigos a ON a.id = s.artigo_id WHERE a.ativo = 1 AND s.quantidade <= s.stock_minimo'
+      );
+      assert.ok(
+        emFalta.some((r) => r.nome === 'Tremocos'),
+        'o backoffice tem de considerar o mesmo artigo em falta'
+      );
+
+      // O funcionario continua sem acesso a gestao (o painel de alertas do POS
+      // nao lhe da nenhum atalho para la).
+      const gestao = await balcao.get('/admin/stocks');
+      assert.equal(gestao.status, 403);
+    });
+
+    // --- 13. Movimentos internos: contam como dinheiro esperado em caixa -----
+    // ACRESCENTADO NO FIM de proposito (ver nota do passo 12).
+    await t.test('13. Movimento interno conta para o dinheiro esperado no fecho de caixa', async () => {
+      const balcao = request.agent(app);
+      await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+
+      // Given: nao ha caixa aberta neste ponto (foi fechada no passo 11).
+      const semCaixa = await uma("SELECT id FROM sessoes_caixa WHERE estado = 'aberta'");
+      assert.equal(semCaixa, null);
+
+      const agua = await artigoPorNome('Agua 0.5L'); // 0.80
+      const stockAntes = Number(agua.quantidade);
+
+      // When: o funcionario regista um movimento SEM metodo de pagamento.
+      const mov = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: agua.id, quantidade: 3 }]
+      });
+
+      // Then: registado como interno, com total, sem dinheiro e sem troco.
+      assert.equal(mov.status, 201, 'o registo nao pode exigir caixa aberta');
+      assert.equal(mov.body.venda.total, 2.4); // 3 x 0.80
+      assert.equal(mov.body.venda.metodo_pagamento, 'interno');
+      assert.equal(mov.body.venda.valor_dinheiro, 0);
+      assert.equal(mov.body.venda.troco, 0);
+
+      const gravado = await uma('SELECT * FROM vendas WHERE id = ?', [mov.body.venda.id]);
+      assert.equal(gravado.metodo_pagamento, 'interno');
+      assert.equal(Number(gravado.valor_dinheiro), 0);
+      assert.equal(Number(gravado.valor_multibanco), 0);
+      assert.equal(Number(gravado.troco), 0);
+      assert.equal(gravado.sessao_caixa_id, null, 'sem caixa aberta o movimento fica sem sessao');
+      assert.equal(gravado.estado, 'concluida');
+
+      // O stock e descontado tal como antes.
+      assert.equal(Number((await artigoPorNome('Agua 0.5L')).quantidade), stockAntes - 3);
+
+      // O comprovativo abre e nao fala de dinheiro.
+      const talao = await balcao.get(`/pos/venda/${mov.body.venda.id}/talao`);
+      assert.equal(talao.status, 200);
+      assert.doesNotMatch(talao.text, /Troco/i);
+      assert.doesNotMatch(talao.text, /Multibanco/i);
+      assert.doesNotMatch(talao.text, /Recebido/i);
+
+      // O POS avisa (sem bloquear) que nao ha caixa aberta.
+      const posSemCaixa = await balcao.get('/pos');
+      assert.equal(posSemCaixa.status, 200);
+      assert.match(posSemCaixa.text, /Nao ha caixa aberta/);
+      assert.match(posSemCaixa.text, /Avise o responsavel/);
+      assert.ok(
+        !posSemCaixa.text.includes('pos-aviso-caixa-btn'),
+        'o funcionario nao pode ter atalho para abrir caixa'
+      );
+
+      // E o ecra de caixa (so do admin) sinaliza o dinheiro que ficou fora de
+      // qualquer sessao. Neste ponto ha 2 movimentos sem caixa:
+      //   4.50 (Tremocos, passo 12) + 2.40 (agua, agora) = 6.90
+      const semSessao = await uma(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS total FROM vendas WHERE sessao_caixa_id IS NULL AND estado = 'concluida'"
+      );
+      assert.equal(Number(semSessao.n), 2);
+      assert.equal(Number(semSessao.total), 6.9);
+
+      const ecraCaixa = await agente.get('/caixa');
+      assert.equal(ecraCaixa.status, 200);
+      assert.match(ecraCaixa.text, /movimentos sem caixa associada/);
+      assert.ok(ecraCaixa.text.includes('6.90'), 'o aviso tem de mostrar o total fora de caixa');
+
+      // E agora o essencial (CASO DO CLIENTE): com a caixa aberta, os
+      // movimentos internos ENTRAM no valor esperado pelo seu total.
+      const abertura = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '30.00' });
+      assert.equal(abertura.status, 302);
+
+      const movComCaixa = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: agua.id, quantidade: 5 }] // 5 x 0.80 = 4.00
+      });
+      assert.equal(movComCaixa.status, 201);
+      assert.equal(movComCaixa.body.venda.total, 4);
+
+      // esperado = 30 (fundo) + 4.00 (movimentos internos) = 34.00
+      let estado = await caixaService.estadoAtual();
+      assert.equal(estado.resumo.movimentos_internos, 4);
+      assert.equal(estado.resumo.vendas_dinheiro, 0);
+      assert.equal(estado.resumo.vendas_multibanco, 0);
+      assert.equal(estado.resumo.esperado, 34);
+
+      // Um movimento ANULADO nao pode contar para o esperado.
+      const anulavel = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: agua.id, quantidade: 2 }] // 1.60
+      });
+      assert.equal(anulavel.status, 201);
+      estado = await caixaService.estadoAtual();
+      assert.equal(estado.resumo.esperado, 35.6, '34.00 + 1.60 enquanto esta concluido');
+
+      const anulacao = await agente.post(`/admin/vendas/${anulavel.body.venda.id}/anular`).type('form').send({});
+      assert.equal(anulacao.status, 302);
+      estado = await caixaService.estadoAtual();
+      assert.equal(estado.resumo.movimentos_internos, 4, 'o movimento anulado sai do agregado');
+      assert.equal(estado.resumo.esperado, 34, 'movimentos anulados nao contam para o esperado');
+
+      // O ecra de caixa mostra as parcelas do esperado, auditaveis a olho.
+      const resumoHtml = await agente.get('/caixa');
+      assert.equal(resumoHtml.status, 200);
+      assert.match(resumoHtml.text, /Movimentos internos/);
+      assert.match(resumoHtml.text, /Dinheiro esperado em caixa/);
+      assert.ok(resumoHtml.text.includes('34.00'), 'o esperado 34.00 tem de aparecer no ecra');
+
+      // Fecha com exatamente o esperado: sem diferenca.
+      const fecho = await agente.post('/caixa/fechar').type('form').send({ total_contado: '34.00' });
+      assert.equal(fecho.status, 302);
+
+      const sessaoFechada = await uma(
+        "SELECT * FROM sessoes_caixa WHERE estado = 'fechada' ORDER BY id DESC LIMIT 1"
+      );
+      assert.equal(Number(sessaoFechada.fundo_inicial), 30);
+      assert.equal(Number(sessaoFechada.total_contado), 34);
+      assert.equal(
+        Number(sessaoFechada.diferenca),
+        0,
+        'fundo 30 + movimentos internos 4 = 34 esperado'
+      );
+
+      // O detalhe da sessao fechada conta a mesma historia (historico coerente).
+      const detalhe = await agente.get(`/caixa/sessao/${sessaoFechada.id}`);
+      assert.equal(detalhe.status, 200);
+      assert.match(detalhe.text, /Como se chegou ao dinheiro esperado/);
+      assert.ok(detalhe.text.includes('34.00'));
+    });
+
+    // --- 13b. Caso exato relatado pelo cliente ------------------------------
+    await t.test('13b. CASO DO CLIENTE: fundo 20 + movimentos internos 5.00 => esperado 25.00', async () => {
+      const balcao = request.agent(app);
+      await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+
+      // Given: caixa aberta com 20.00 de fundo.
+      const abertura = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '20.00' });
+      assert.equal(abertura.status, 302);
+
+      // When: movimentos internos que somam EXATAMENTE 5.00
+      //   Coca-Cola 1.50 x 2 = 3.00  +  Imperial 1.20 x 1 = 1.20
+      //   + Agua 0.5L 0.80 x 1 = 0.80   ->  3.00 + 1.20 + 0.80 = 5.00
+      const cola = await artigoPorNome('Coca-Cola');
+      const imperial = await artigoPorNome('Imperial');
+      const agua = await artigoPorNome('Agua 0.5L');
+      assert.equal(Number(cola.preco), 1.5);
+      assert.equal(Number(imperial.preco), 1.2);
+      assert.equal(Number(agua.preco), 0.8);
+
+      const um = await balcao.post('/api/vendas').send({
+        itens: [{ artigo_id: cola.id, quantidade: 2 }]
+      });
+      assert.equal(um.body.venda.total, 3);
+
+      const dois = await balcao.post('/api/vendas').send({
+        itens: [
+          { artigo_id: imperial.id, quantidade: 1 },
+          { artigo_id: agua.id, quantidade: 1 }
+        ]
+      });
+      assert.equal(dois.body.venda.total, 2);
+
+      // Then: 20 + 5 = 25 (era 20 antes da correcao — o bug relatado).
+      const estado = await caixaService.estadoAtual();
+      assert.equal(estado.resumo.fundo_inicial, 20);
+      assert.equal(estado.resumo.movimentos_internos, 5);
+      assert.equal(estado.resumo.esperado, 25);
+
+      // E com 25.00 contados a diferenca e zero.
+      const fecho = await agente.post('/caixa/fechar').type('form').send({ total_contado: '25.00' });
+      assert.equal(fecho.status, 302);
+
+      const sessao = await uma("SELECT * FROM sessoes_caixa WHERE estado = 'fechada' ORDER BY id DESC LIMIT 1");
+      assert.equal(Number(sessao.fundo_inicial), 20);
+      assert.equal(Number(sessao.total_contado), 25);
+      assert.equal(Number(sessao.diferenca), 0);
+    });
+
+    // --- 14. Backoffice: listagem sem coluna de metodo de pagamento ---------
+    // Read-only: nao cria registos, logo nao invalida nenhum total acima.
+    await t.test('14. /admin/vendas mostra "Movimentos Internos" e ja nao tem coluna Tipo', async () => {
+      const res = await agente.get('/admin/vendas');
+      assert.equal(res.status, 200);
+
+      // A area passou a chamar-se Movimentos Internos (titulo + menu).
+      assert.match(res.text, /Movimentos Internos/);
+
+      // A coluna "Tipo" saiu do cabecalho da tabela.
+      assert.doesNotMatch(res.text, /<th[^>]*>\s*Tipo\s*<\/th>/);
+
+      // E o filtro por metodo de pagamento tambem.
+      assert.ok(!res.text.includes('id="fMetodo"'), 'o filtro de pagamento devia ter saido');
+      assert.ok(!res.text.includes('name="metodo"'), 'nao devia sobrar nenhum campo metodo');
+
+      // A tabela continua alinhada: 7 colunas no cabecalho.
+      const cabecalho = res.text.match(/<thead>[\s\S]*?<\/thead>/);
+      assert.ok(cabecalho, 'a tabela devia ter cabecalho');
+      assert.equal((cabecalho[0].match(/<th[\s>]/g) || []).length, 7);
+
+      // O dado nao desapareceu: continua no detalhe de um registo com pagamento.
+      const antiga = await uma("SELECT id FROM vendas WHERE metodo_pagamento = 'multibanco' LIMIT 1");
+      assert.ok(antiga, 'o seed do fluxo devia ter deixado uma venda antiga por multibanco');
+      const detalhe = await agente.get(`/admin/vendas/${antiga.id}`);
+      assert.equal(detalhe.status, 200);
+      assert.match(detalhe.text, /multibanco/);
+
+      // Um movimento interno mostra o rotulo proprio, sem valores de dinheiro.
+      const interna = await uma("SELECT id FROM vendas WHERE metodo_pagamento = 'interno' LIMIT 1");
+      const detalheInterno = await agente.get(`/admin/vendas/${interna.id}`);
+      assert.equal(detalheInterno.status, 200);
+      assert.match(detalheInterno.text, /movimento interno/);
+      assert.doesNotMatch(detalheInterno.text, /Troco/);
+
+      // O parametro ?metodo= continua a funcionar (URLs guardadas) e agora e
+      // sinalizado ao utilizador, para nao filtrar em silencio.
+      const filtrada = await agente.get('/admin/vendas?metodo=multibanco');
+      assert.equal(filtrada.status, 200);
+      assert.match(filtrada.text, /A mostrar apenas os registos com pagamento/);
+    });
+  } finally {
+    // Limpeza garantida, mesmo com falhas acima.
+    for (const ficheiro of ficheirosUpload) {
+      fs.promises.unlink(ficheiro).catch(() => {});
+    }
+    await bd.end().catch(() => {});
+    await require('../../src/config/db').close().catch(() => {});
+
+    const limpeza = await ligar(undefined).catch(() => null);
+    if (limpeza) {
+      await limpeza.query(`DROP DATABASE IF EXISTS \`${TEST_DB.database}\``).catch(() => {});
+      await limpeza.end().catch(() => {});
+    }
+  }
+});

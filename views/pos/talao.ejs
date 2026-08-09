@@ -1,0 +1,65 @@
+<%# Comprovativo imprimivel de movimento interno. Largura 80mm (default) ou 58mm via ?papel=58. Nao ha pagamento nem troco: o preco do artigo e o valor final. %>
+<div class="talao<%= papel === '58' ? ' talao-58' : '' %>">
+
+  <div class="talao-centro">
+    <div class="talao-nome"><%= appNome %></div>
+    <div class="talao-sub">Comprovativo de movimento interno</div>
+  </div>
+
+  <hr class="talao-sep">
+
+  <div class="talao-meta">
+    <div class="talao-linha"><span>Movimento</span><span>#<%= venda.numero %></span></div>
+    <div class="talao-linha"><span>Data</span><span><%= dataHoraPT(venda.criado_em) %></span></div>
+    <div class="talao-linha"><span>Operador</span><span><%= venda.utilizador_nome || '-' %></span></div>
+  </div>
+
+  <% if (venda.estado === 'anulada') { %>
+    <div class="talao-anulada">*** MOVIMENTO ANULADO ***</div>
+  <% } %>
+
+  <hr class="talao-sep">
+
+  <table class="talao-itens">
+    <tbody>
+      <% itens.forEach(function (item) { %>
+        <tr>
+          <td class="talao-qtd"><%= Number(item.quantidade) %>x</td>
+          <td><%= item.nome_snapshot %></td>
+          <td class="talao-valor"><%= eur(item.subtotal) %></td>
+        </tr>
+      <% }); %>
+    </tbody>
+  </table>
+
+  <hr class="talao-sep">
+
+  <div class="talao-total">
+    <span>TOTAL</span>
+    <span><%= eur(venda.total) %></span>
+  </div>
+
+  <hr class="talao-sep">
+
+  <div class="talao-centro talao-rodape">
+    Obrigado e boa partida!
+  </div>
+</div>
+
+<div class="talao-acoes d-print-none">
+  <button type="button" class="btn btn-primary btn-lg" onclick="window.print()">
+    <i class="bi bi-printer" aria-hidden="true"></i> Imprimir
+  </button>
+  <a class="btn btn-outline-secondary btn-lg" href="/pos" id="talaoVoltar">
+    <i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar aos movimentos
+  </a>
+</div>
+
+<p class="talao-papel text-body-secondary d-print-none">
+  Papel:
+  <% if (papel === '58') { %>
+    58mm · <a href="/pos/venda/<%= venda.id %>/talao">usar 80mm</a>
+  <% } else { %>
+    80mm · <a href="/pos/venda/<%= venda.id %>/talao?papel=58">usar 58mm</a>
+  <% } %>
+</p>

@@ -1,0 +1,66 @@
+<h1 class="h4 mb-3"><i class="bi bi-clock-history" aria-hidden="true"></i> Movimentos de stock</h1>
+
+<form class="row g-2 mb-3 align-items-end" method="get">
+  <div class="col-sm-3">
+    <label class="form-label" for="fArtigo">Artigo</label>
+    <select class="form-select" id="fArtigo" name="artigo">
+      <option value="">Todos os artigos</option>
+      <% artigos.forEach(function (a) { %>
+        <option value="<%= a.id %>" <%= Number(filtros.artigoId) === Number(a.id) ? 'selected' : '' %>><%= a.nome %></option>
+      <% }); %>
+    </select>
+  </div>
+  <div class="col-sm-2">
+    <label class="form-label" for="fTipo">Tipo</label>
+    <%# `venda` e o valor tecnico do tipo de movimento de stock; na interface e "consumo". %>
+    <% var rotuloTipo = { entrada: 'entrada', saida: 'saida', ajuste: 'ajuste', venda: 'consumo' }; %>
+    <select class="form-select" id="fTipo" name="tipo">
+      <option value="">Todos</option>
+      <% ['entrada','saida','ajuste','venda'].forEach(function (t) { %>
+        <option value="<%= t %>" <%= filtros.tipo === t ? 'selected' : '' %>><%= rotuloTipo[t] %></option>
+      <% }); %>
+    </select>
+  </div>
+  <div class="col-sm-2">
+    <label class="form-label" for="fDe">De</label>
+    <input type="date" class="form-control" id="fDe" name="de" value="<%= filtros.de || '' %>">
+  </div>
+  <div class="col-sm-2">
+    <label class="form-label" for="fAte">Ate</label>
+    <input type="date" class="form-control" id="fAte" name="ate" value="<%= filtros.ate || '' %>">
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-primary">Filtrar</button></div>
+  <div class="col-auto"><a class="btn btn-link" href="/admin/movimentos">Limpar</a></div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-sm table-striped tabela-compacta">
+    <thead>
+      <tr>
+        <th scope="col">Data</th><th scope="col">Artigo</th><th scope="col">Tipo</th>
+        <th scope="col" class="text-end">Qtd</th><th scope="col" class="text-end">Apos</th>
+        <th scope="col">Motivo</th><th scope="col">Utilizador</th>
+      </tr>
+    </thead>
+    <tbody>
+      <%
+        var badgeTipo = { entrada: 'success', saida: 'warning', ajuste: 'info', venda: 'primary' };
+      %>
+      <% movimentos.forEach(function (m) { %>
+        <tr>
+          <td class="text-nowrap"><%= dataHoraPT(m.criado_em) %></td>
+          <td><%= m.artigo_nome %></td>
+          <td><span class="badge text-bg-<%= badgeTipo[m.tipo] || 'secondary' %>"><%= rotuloTipo[m.tipo] || m.tipo %></span></td>
+          <td class="text-end <%= Number(m.quantidade) < 0 ? 'text-danger' : '' %>"><%= Number(m.quantidade) %></td>
+          <td class="text-end <%= Number(m.quantidade_apos) < 0 ? 'text-danger fw-bold' : '' %>"><%= Number(m.quantidade_apos) %></td>
+          <td class="small"><%= m.motivo || '' %></td>
+          <td class="small"><%= m.utilizador_nome || '-' %></td>
+        </tr>
+      <% }); %>
+      <% if (!movimentos.length) { %>
+        <tr data-sem-dados="1"><td colspan="7" class="text-body-secondary">Sem movimentos para estes filtros.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+<p class="text-body-secondary small">Mostra no maximo os <%= filtros.limite %> movimentos mais recentes.</p>

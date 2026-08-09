@@ -1,0 +1,48 @@
+<div class="row justify-content-center align-items-center" style="min-height: 90vh;">
+  <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+
+    <div class="text-center mb-4">
+      <i class="bi bi-cup-hot display-4 text-primary"></i>
+      <h1 class="h3 mt-2"><%= appNome %></h1>
+      <p class="text-body-secondary mb-0">Gestao de bar do campo de futebol</p>
+    </div>
+
+    <% if (erro) { %>
+      <div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <%= erro %></div>
+    <% } %>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-body-secondary mb-3">Entrar com utilizador</h2>
+        <form method="post" action="/login" autocomplete="off">
+          <input type="hidden" name="next" value="<%= next %>">
+          <div class="mb-3">
+            <label class="form-label" for="username">Utilizador</label>
+            <input class="form-control form-control-lg" id="username" name="username" required autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="password">Password</label>
+            <input type="password" class="form-control form-control-lg" id="password" name="password" required>
+          </div>
+          <button class="btn btn-primary btn-lg w-100" type="submit">
+            <i class="bi bi-box-arrow-in-right"></i> Entrar
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-body">
+        <h2 class="h6 text-uppercase text-body-secondary mb-3">Entrada rapida por PIN</h2>
+        <form method="post" action="/pos/pin" autocomplete="off" class="d-flex gap-2">
+          <input class="form-control form-control-lg text-center" name="pin" inputmode="numeric"
+                 pattern="[0-9]{4}" maxlength="4" placeholder="••••" required
+                 aria-label="PIN de 4 digitos">
+          <button class="btn btn-success btn-lg" type="submit"><i class="bi bi-arrow-right-circle"></i></button>
+        </form>
+        <p class="form-text mb-0">Vai directamente para o ecra de Movimentos Internos.</p>
+      </div>
+    </div>
+
+  </div>
+</div>

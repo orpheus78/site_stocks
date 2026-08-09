@@ -1,0 +1,65 @@
+# Ambiente de desenvolvimento local do "Bar do Campo".
+#
+# ATENCAO: esta configuracao destina-se EXCLUSIVAMENTE a desenvolvimento local.
+# Os valores por omissao (`${VAR:-default}`) sao passwords fracas e conhecidas,
+# e a base de dados fica exposta em localhost sem TLS. NAO USAR EM PRODUCAO.
+# Em producao as credenciais devem vir de um gestor de segredos e nunca de
+# defaults em ficheiro versionado.
+#
+# Os nomes das variaveis coincidem com os que `src/config/env.js` le, para que
+# o mesmo `.env` sirva a aplicacao e ao compose.
+#
+# Nota sobre a porta: no host o mapeamento e `${DB_PORT:-3306}:3306`. Como a
+# porta 3306 do host ja esta ocupada nesta maquina, o `.env` usa DB_PORT=3307.
+# A aplicacao liga-se a `DB_HOST=localhost:${DB_PORT}`, pelo que basta manter
+# as duas coisas coerentes atraves da mesma variavel.
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: bar_campo_db
+    restart: unless-stopped
+    environment:
+      # Password de root apenas para administracao local do contentor.
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root-dev-only}
+      MARIADB_DATABASE: ${DB_NAME:-bar_campo}
+      MARIADB_USER: ${DB_USER:-bar}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-bar-dev-only}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    ports:
+      - '${DB_PORT:-3306}:3306'
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      # NOTA: nao se usa bind mount de scripts para /docker-entrypoint-initdb.d.
+      # Duas razoes: (1) o Docker Desktop no macOS nao consegue partilhar
+      # diretorios dentro do OneDrive, o que tornaria o arranque dependente da
+      # localizacao do projeto; (2) os scripts de init so correm na primeira
+      # criacao do volume, divergindo silenciosamente do schema real.
+      # Ver `npm run db:grants` e `npm run db:schema` (ambos idempotentes).
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  # Inspecao visual da base de dados. Nao arranca por omissao.
+  # Usar: docker compose --profile tools up -d adminer  (npm run db:tools)
+  adminer:
+    image: adminer:4
+    container_name: bar_campo_adminer
+    restart: unless-stopped
+    profiles: ['tools']
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - '${ADMINER_PORT:-8080}:8080'
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mariadb_data:

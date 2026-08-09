@@ -1,0 +1,53 @@
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-tags" aria-hidden="true"></i> Categorias</h1>
+  <a class="btn btn-primary" href="/admin/categorias/novo"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova categoria</a>
+</div>
+
+<p class="text-body-secondary small">
+  A cor da categoria e usada nos botoes e nos tiles do POS — escolha cores bem distintas entre si.
+</p>
+
+<div class="table-responsive">
+  <table class="table table-hover tabela-compacta align-middle">
+    <thead>
+      <tr>
+        <th scope="col">Cor</th><th scope="col">Nome</th><th scope="col" class="text-end">Ordem</th>
+        <th scope="col">Estado</th><th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% categorias.forEach(function (c) { %>
+        <tr>
+          <td>
+            <span class="miniatura-cor" style="background: <%= c.cor %>" aria-hidden="true"></span>
+            <span class="visually-hidden"><%= c.cor %></span>
+            <code class="ms-1 small text-body-secondary"><%= c.cor %></code>
+          </td>
+          <td class="fw-semibold"><%= c.nome %></td>
+          <td class="text-end"><%= c.ordem %></td>
+          <td>
+            <span class="badge text-bg-<%= c.ativo ? 'success' : 'secondary' %>"><%= c.ativo ? 'Ativa' : 'Inativa' %></span>
+          </td>
+          <td class="text-end">
+            <a class="btn btn-outline-secondary btn-sm" href="/admin/categorias/<%= c.id %>/editar"
+               aria-label="Editar <%= c.nome %>"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+            <%# Confirmacao pelo modal da aplicacao (/js/confirmar.js): zero JS inline. %>
+            <form method="post" action="/admin/categorias/<%= c.id %>/eliminar" class="d-inline"
+                  data-confirmar="Eliminar a categoria «<%= c.nome %>»?"
+                  data-confirmar-titulo="Eliminar categoria"
+                  data-confirmar-detalhe="Se tiver artigos, sera apenas desativada."
+                  data-confirmar-ok="Eliminar categoria"
+                  data-confirmar-perigo="1">
+              <button class="btn btn-outline-danger btn-sm" aria-label="Eliminar <%= c.nome %>">
+                <i class="bi bi-trash3" aria-hidden="true"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (!categorias.length) { %>
+        <tr data-sem-dados="1"><td colspan="5" class="text-body-secondary">Sem categorias. Crie a primeira para organizar o POS.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>

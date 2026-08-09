@@ -1,0 +1,160 @@
+/* ==========================================================================
+   Talao de venda — impressora termica.
+   Default 80mm; classe .talao-58 para impressoras de 58mm (?papel=58).
+   ========================================================================== */
+
+body.talao-body {
+  background: #e9ecef;
+}
+
+body.talao-body > main.container-fluid {
+  padding: 16px 8px !important;
+}
+
+.talao {
+  width: 80mm;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 4mm;
+  background: #fff;
+  color: #000;
+  font-family: "Courier New", "DejaVu Sans Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+
+.talao-58 {
+  width: 58mm;
+  font-size: 11px;
+}
+
+.talao-centro {
+  text-align: center;
+}
+
+.talao-nome {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.talao-sub {
+  font-size: 11px;
+}
+
+.talao-sep {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 6px 0;
+}
+
+.talao-meta {
+  font-size: 11px;
+}
+
+.talao-anulada {
+  margin: 6px 0;
+  padding: 4px;
+  border: 2px solid #000;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.talao-itens {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.talao-itens td {
+  vertical-align: top;
+  padding: 1px 0;
+}
+
+.talao-itens .talao-qtd {
+  width: 8mm;
+  white-space: nowrap;
+}
+
+.talao-itens .talao-valor {
+  text-align: right;
+  white-space: nowrap;
+  padding-left: 3mm;
+}
+
+.talao-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.talao-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.talao-rodape {
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+/* ---------- Acoes no ecra (nunca impressas) ---------- */
+.talao-acoes {
+  max-width: 80mm;
+  margin: 16px auto 0;
+  display: grid;
+  gap: 10px;
+}
+
+.talao-acoes .btn {
+  min-height: 64px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.talao-papel {
+  max-width: 80mm;
+  margin: 10px auto 0;
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+/* ---------- Impressao ---------- */
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body.talao-body {
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  body.talao-body > main.container-fluid {
+    padding: 0 !important;
+  }
+
+  .talao {
+    width: 80mm;
+    margin: 0;
+    padding: 2mm 3mm;
+    box-shadow: none;
+    font-size: 12px;
+  }
+
+  .talao-58 {
+    width: 58mm;
+    font-size: 11px;
+  }
+
+  .d-print-none {
+    display: none !important;
+  }
+}

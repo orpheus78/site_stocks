@@ -1,0 +1,126 @@
+<h1 class="h4 mb-3"><i class="bi bi-graph-up" aria-hidden="true"></i> Relatorios</h1>
+
+<form class="row g-2 mb-4 align-items-end" method="get">
+  <div class="col-sm-3">
+    <label class="form-label" for="de">De</label>
+    <input type="date" class="form-control" id="de" name="de" value="<%= de %>">
+  </div>
+  <div class="col-sm-3">
+    <label class="form-label" for="ate">Ate</label>
+    <input type="date" class="form-control" id="ate" name="ate" value="<%= ate %>">
+  </div>
+  <div class="col-auto"><button class="btn btn-primary">Aplicar</button></div>
+  <div class="col-auto">
+    <a class="btn btn-outline-secondary" href="/admin/relatorios?de=<%= hojeISO() %>&ate=<%= hojeISO() %>">Hoje</a>
+  </div>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card text-bg-primary h-100"><div class="card-body">
+      <div class="kpi-etiqueta">Total consumido</div><div class="kpi-valor"><%= eur(resumo.total) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Nº de movimentos</div><div class="kpi-valor"><%= resumo.n_vendas %></div>
+    </div></div>
+  </div>
+  <%# Dinheiro/multibanco so existem no HISTORICO de vendas com pagamento. %>
+  <% if (Number(resumo.dinheiro) || Number(resumo.multibanco)) { %>
+    <div class="col-6 col-lg-3">
+      <div class="card kpi-card h-100"><div class="card-body">
+        <div class="kpi-etiqueta text-body-secondary">Dinheiro (historico)</div><div class="kpi-valor"><%= eur(resumo.dinheiro) %></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card kpi-card h-100"><div class="card-body">
+        <div class="kpi-etiqueta text-body-secondary">Multibanco (historico)</div><div class="kpi-valor"><%= eur(resumo.multibanco) %></div>
+      </div></div>
+    </div>
+  <% } %>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <h2 class="h6">Movimentos por dia</h2>
+    <%
+      var maxDia = 0;
+      porDia.forEach(function (d) { maxDia = Math.max(maxDia, Number(d.total)); });
+    %>
+    <div class="grafico-barras">
+      <% porDia.forEach(function (d) { %>
+        <% var pct = maxDia > 0 ? Math.round((Number(d.total) / maxDia) * 100) : 0; %>
+        <div class="grafico-linha">
+          <span class="text-body-secondary"><%= d.dia instanceof Date ? d.dia.toLocaleDateString('pt-PT') : d.dia %></span>
+          <span class="grafico-barra"><span style="width: <%= pct %>%"></span></span>
+          <span class="grafico-valor"><%= eur(d.total) %></span>
+        </div>
+      <% }); %>
+      <% if (!porDia.length) { %><p class="text-body-secondary mb-0">Sem movimentos no periodo.</p><% } %>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <h2 class="h6">Artigos mais consumidos</h2>
+    <%
+      var maxQtd = 0;
+      top.forEach(function (a) { maxQtd = Math.max(maxQtd, Number(a.quantidade)); });
+    %>
+    <div class="grafico-barras">
+      <% top.forEach(function (a) { %>
+        <% var pctQ = maxQtd > 0 ? Math.round((Number(a.quantidade) / maxQtd) * 100) : 0; %>
+        <div class="grafico-linha">
+          <span class="text-truncate" title="<%= a.nome %>"><%= a.nome %></span>
+          <span class="grafico-barra"><span style="width: <%= pctQ %>%"></span></span>
+          <span class="grafico-valor"><%= Number(a.quantidade) %> · <%= eur(a.total) %></span>
+        </div>
+      <% }); %>
+      <% if (!top.length) { %><p class="text-body-secondary mb-0">Sem movimentos no periodo.</p><% } %>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-lg-6">
+    <h2 class="h6">Por categoria</h2>
+    <div class="table-responsive">
+      <table class="table table-sm tabela-compacta">
+        <thead><tr><th scope="col">Categoria</th><th scope="col" class="text-end">Qtd</th><th scope="col" class="text-end">Total</th></tr></thead>
+        <tbody>
+          <% porCategoria.forEach(function (c) { %>
+            <tr><td><%= c.categoria %></td><td class="text-end"><%= Number(c.quantidade) %></td><td class="text-end"><%= eur(c.total) %></td></tr>
+          <% }); %>
+          <% if (!porCategoria.length) { %>
+            <tr data-sem-dados="1"><td colspan="3" class="text-body-secondary">Sem dados no periodo.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <h2 class="h6">Stock igual ou abaixo do minimo</h2>
+    <div class="table-responsive">
+      <table class="table table-sm tabela-compacta">
+        <thead><tr><th scope="col">Artigo</th><th scope="col" class="text-end">Stock</th><th scope="col" class="text-end">Minimo</th></tr></thead>
+        <tbody>
+          <% stockBaixo.forEach(function (s) { %>
+            <tr class="<%= Number(s.quantidade) < 0 ? 'table-danger' : 'table-warning' %>">
+              <td><%= s.artigo_nome %></td>
+              <td class="text-end fw-bold"><%= Number(s.quantidade) %> <%= s.unidade %></td>
+              <td class="text-end"><%= Number(s.stock_minimo) %></td>
+            </tr>
+          <% }); %>
+          <% if (!stockBaixo.length) { %>
+            <tr data-sem-dados="1"><td colspan="3" class="text-body-secondary">Sem alertas de stock.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<p class="text-body-secondary small mt-3">
+  Periodo: <%= de %> a <%= ate %>. Apenas movimentos concluidos (anulados nao contam).
+</p>

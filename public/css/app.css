@@ -1,0 +1,188 @@
+/* ==========================================================================
+   Estilos partilhados (backoffice + caixa). O POS tem /css/pos.css.
+   ========================================================================== */
+:root {
+  --pos-toque-min: 64px;
+}
+
+.object-fit-cover {
+  object-fit: cover;
+}
+
+/* Alvos de toque generosos (caixa e accoes rapidas). */
+.btn-toque {
+  min-height: var(--pos-toque-min);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* -------------------------------------------------- teclado numerico grande */
+
+.teclado-num {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  max-width: 320px;
+}
+
+.teclado-num button {
+  min-height: var(--pos-toque-min);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 12px;
+  background: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  font-size: 1.5rem;
+  font-weight: 700;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.teclado-num button:active {
+  background: var(--bs-secondary-bg);
+}
+
+.teclado-num button[data-tecla='limpar'] {
+  grid-column: 1 / -1;
+  font-size: 1.2rem;
+  color: var(--bs-danger);
+}
+
+/* Campo de valor grande associado ao teclado. */
+.valor-grande {
+  font-size: 2rem;
+  font-weight: 800;
+  text-align: right;
+  min-height: var(--pos-toque-min);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------- caixa: fecho */
+
+.caixa-diferenca {
+  margin-top: 10px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.caixa-diferenca[hidden] {
+  display: none;
+}
+
+.caixa-dif-ok {
+  background: #d1e7dd;
+  color: #0a3622;
+}
+
+.caixa-dif-falta {
+  background: #f8d7da;
+  color: #58151c;
+}
+
+.caixa-dif-sobra {
+  background: #fff3cd;
+  color: #664d03;
+}
+
+.caixa-estado-badge {
+  font-size: 0.95rem;
+  padding: 6px 12px;
+}
+
+/* ------------------------------------------------ backoffice: mini graficos */
+/* Barras em HTML/CSS puro: sem bibliotecas de graficos. */
+
+.grafico-barras {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grafico-linha {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(84px, auto);
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+}
+
+.grafico-barra {
+  height: 18px;
+  border-radius: 9px;
+  background: var(--bs-secondary-bg);
+  overflow: hidden;
+}
+
+.grafico-barra > span {
+  display: block;
+  height: 100%;
+  border-radius: 9px;
+  background: var(--bs-primary);
+  min-width: 2px;
+}
+
+.grafico-valor {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------ backoffice: tabelas */
+
+.tabela-compacta td,
+.tabela-compacta th {
+  vertical-align: middle;
+}
+
+/* A pesquisa no cliente esconde linhas via `hidden`. */
+tr[hidden] {
+  display: none !important;
+}
+
+.miniatura {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+/* "Tile" de cor quando o artigo nao tem imagem (nunca imagem partida). */
+.miniatura-cor {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.kpi-card .kpi-valor {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-card .kpi-etiqueta {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ------------------------------------------------------------- impressao */
+
+@media print {
+  .d-print-none {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}

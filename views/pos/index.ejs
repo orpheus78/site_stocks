@@ -1,0 +1,202 @@
+<%#
+  Ecra de MOVIMENTOS INTERNOS (o antigo POS) — desenhado para ecra touch atras
+  do balcao. Nao ha dinheiro: regista-se o consumo de artigos e o respetivo
+  total, sem metodo de pagamento, sem valor recebido e sem troco.
+  API: GET /api/pos/artigos | POST /api/vendas
+  Logica em /js/pos.js, estilos em /css/pos.css.
+%>
+<div class="pos" id="pos">
+
+  <!-- Barra superior discreta: botoes pequenos para nao serem tocados por engano. -->
+  <header class="pos-topo">
+    <div class="pos-topo-info">
+      <span class="pos-topo-marca"><i class="bi bi-cup-hot" aria-hidden="true"></i> <%= appNome %></span>
+      <% if (utilizador) { %>
+        <span class="pos-topo-operador"><i class="bi bi-person" aria-hidden="true"></i> <%= utilizador.nome %></span>
+      <% } %>
+      <span class="pos-topo-relogio" id="posRelogio" aria-hidden="true"></span>
+    </div>
+
+    <div class="pos-topo-acoes">
+      <%# Caixa e backoffice so existem para o admin; o funcionario apenas regista movimentos. %>
+      <% if (isAdmin) { %>
+        <a class="pos-mini-btn" href="/caixa" aria-label="Ir para a caixa"><i class="bi bi-cash-coin" aria-hidden="true"></i><span>Caixa</span></a>
+        <a class="pos-mini-btn" href="/admin" aria-label="Ir para o backoffice"><i class="bi bi-speedometer2" aria-hidden="true"></i><span>Gestao</span></a>
+      <% } %>
+      <%# Confirmacao pelo painel escuro do POS (/js/confirmar.js): zero JS inline. %>
+      <form method="post" action="/logout" class="d-inline"
+            data-confirmar="Terminar sessao?"
+            data-confirmar-titulo="Terminar sessao"
+            data-confirmar-detalhe="O ecra volta ao inicio de sessao. Sera preciso entrar outra vez para registar movimentos."
+            data-confirmar-ok="Terminar sessao"
+            data-confirmar-cancelar="Continuar aqui"
+            data-confirmar-perigo="1">
+        <button class="pos-mini-btn pos-mini-btn-sair" type="submit" aria-label="Terminar sessao">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sair</span>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <%#
+    Aviso de caixa fechada. O registo NAO fica bloqueado, mas como os
+    movimentos internos contam para o dinheiro esperado em caixa, um movimento
+    registado agora fica fora de qualquer fecho. Faixa fina, fora da area de
+    toque do catalogo e do carrinho, para nao estragar o layout touch.
+  %>
+  <% if (typeof caixaAberta !== 'undefined' && !caixaAberta) { %>
+    <div class="pos-aviso-caixa" role="status">
+      <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+      <span>Nao ha caixa aberta — os movimentos ficam fora do fecho.</span>
+      <% if (isAdmin) { %>
+        <a class="pos-aviso-caixa-btn" href="/caixa">Abrir caixa</a>
+      <% } else { %>
+        <strong>Avise o responsavel.</strong>
+      <% } %>
+    </div>
+  <% } %>
+
+  <div class="pos-corpo">
+
+    <!-- COLUNA ESQUERDA: categorias + artigos -->
+    <section class="pos-catalogo" aria-label="Catalogo de artigos">
+      <div class="pos-filtros">
+        <div class="pos-categorias" id="posCategorias" role="group" aria-label="Filtrar por categoria"></div>
+        <div class="pos-pesquisa">
+          <label class="visually-hidden" for="posPesquisa">Pesquisar artigo</label>
+          <i class="bi bi-search" aria-hidden="true"></i>
+          <input type="search" id="posPesquisa" class="pos-pesquisa-input" placeholder="Pesquisar..."
+                 autocomplete="off" enterkeyhint="search">
+          <button type="button" class="pos-pesquisa-limpar" id="posPesquisaLimpar" aria-label="Limpar pesquisa" hidden>
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <%#
+          Contador de artigos abaixo do stock minimo. Fica escondido enquanto
+          nao houver nenhum, para nao ocupar espaco a toa no balcao.
+          Preenchido por /js/pos.js a partir de GET /api/pos/artigos.
+        %>
+        <button type="button" class="pos-falta-btn" id="posFaltaBtn" hidden
+                aria-haspopup="dialog" aria-controls="posFaltaPainel">
+          <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+          <span id="posFaltaTexto">0 artigos em falta</span>
+        </button>
+      </div>
+
+      <div class="pos-grelha" id="posGrelha"></div>
+
+      <div class="pos-estado" id="posEstado" aria-live="polite">
+        <div class="spinner-border" role="status"><span class="visually-hidden">A carregar...</span></div>
+        <p>A carregar artigos...</p>
+      </div>
+    </section>
+
+    <!-- COLUNA DIREITA: carrinho fixo -->
+    <aside class="pos-carrinho" aria-label="Artigos do movimento">
+      <div class="pos-carrinho-topo">
+        <h1 class="pos-carrinho-titulo"><i class="bi bi-basket2" aria-hidden="true"></i> Movimentos Internos</h1>
+        <button type="button" class="pos-limpar" id="posLimpar" aria-label="Limpar lista" disabled>
+          <i class="bi bi-trash3" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <ul class="pos-linhas" id="posLinhas"></ul>
+
+      <p class="pos-carrinho-vazio" id="posCarrinhoVazio">
+        <i class="bi bi-hand-index-thumb" aria-hidden="true"></i>
+        Toque num artigo para o adicionar.
+      </p>
+
+      <div class="pos-carrinho-rodape">
+        <div class="pos-total-linha">
+          <span class="pos-total-etiqueta">TOTAL</span>
+          <span class="pos-total-valor" id="posTotal">0,00 €</span>
+        </div>
+        <div class="pos-total-artigos" id="posContagem">0 artigos</div>
+        <button type="button" class="pos-registar" id="posRegistar" disabled>
+          <i class="bi bi-check2-circle" aria-hidden="true"></i> Registar
+        </button>
+      </div>
+    </aside>
+  </div>
+
+  <%#
+    CONFIRMACAO DO MOVIMENTO (ecra inteiro)
+    Nao ha dinheiro: so se confirma o total do consumo antes de gravar.
+  %>
+  <div class="pos-modal" id="posModalMovimento" role="dialog" aria-modal="true"
+       aria-labelledby="posModalTitulo" hidden>
+    <div class="pos-modal-cabecalho">
+      <h2 class="pos-modal-titulo" id="posModalTitulo">Movimento</h2>
+      <div class="pos-modal-total">
+        <span>Total do movimento</span>
+        <strong id="posModalTotal">0,00 €</strong>
+      </div>
+      <button type="button" class="pos-modal-fechar" id="posModalFechar" aria-label="Cancelar movimento">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="pos-modal-corpo">
+      <p class="pos-modal-ajuda">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        Registo de consumo interno: nao ha cobranca. Confirme para gravar o movimento e o desconto de stock.
+      </p>
+
+      <ul class="pos-resumo" id="posResumo" aria-label="Resumo do movimento"></ul>
+
+      <p class="pos-movimento-erro" id="posMovimentoErro" role="alert" hidden></p>
+    </div>
+
+    <div class="pos-modal-rodape">
+      <button type="button" class="pos-btn-cancelar" id="posCancelar">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar
+      </button>
+      <button type="button" class="pos-btn-confirmar" id="posConfirmar">
+        <i class="bi bi-check-lg" aria-hidden="true"></i> CONFIRMAR
+      </button>
+    </div>
+  </div>
+
+  <!-- ECRA DE SUCESSO -->
+  <div class="pos-sucesso" id="posSucesso" role="dialog" aria-modal="true" aria-labelledby="posSucessoTitulo" hidden>
+    <div class="pos-sucesso-caixa">
+      <i class="bi bi-check-circle-fill pos-sucesso-icone" aria-hidden="true"></i>
+      <h2 class="pos-sucesso-titulo" id="posSucessoTitulo">Movimento registado</h2>
+      <p class="pos-sucesso-numero" id="posSucessoNumero"></p>
+
+      <div class="pos-sucesso-acoes">
+        <button type="button" class="pos-sucesso-nova" id="posSucessoNova">
+          <i class="bi bi-arrow-repeat" aria-hidden="true"></i> NOVO MOVIMENTO
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <%#
+    PAINEL DE ARTIGOS EM FALTA
+    Lista os artigos abaixo do stock minimo, dos mais criticos para os menos.
+    E so informacao: nao ha aqui nenhuma accao de gestao nem link para /admin
+    (o funcionario nao tem acesso ao backoffice — so avisa o responsavel).
+    A lista e construida em /js/pos.js com createElement/textContent.
+  %>
+  <div class="pos-falta" id="posFaltaPainel" role="dialog" aria-modal="true"
+       aria-labelledby="posFaltaTitulo" hidden>
+    <div class="pos-falta-caixa">
+      <h2 class="pos-falta-titulo" id="posFaltaTitulo">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> Artigos em falta
+      </h2>
+      <p class="pos-falta-ajuda">Avise o responsavel para repor estes artigos.</p>
+
+      <ul class="pos-falta-lista" id="posFaltaLista"></ul>
+
+      <button type="button" class="pos-falta-fechar" id="posFaltaFechar">
+        <i class="bi bi-check-lg" aria-hidden="true"></i> FECHAR
+      </button>
+    </div>
+  </div>
+
+  <!-- Zona de toasts -->
+  <div class="pos-toasts" id="posToasts" aria-live="polite" aria-atomic="true"></div>
+</div>

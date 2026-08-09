@@ -1,0 +1,110 @@
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Sessao de caixa #<%= sessao.id %></h1>
+  <span class="badge text-bg-<%= sessao.estado === 'aberta' ? 'success' : 'secondary' %> caixa-estado-badge"><%= sessao.estado %></span>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Fundo inicial</div>
+      <div class="kpi-valor"><%= eur(resumo.fundo_inicial) %></div>
+    </div></div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Movimentos internos (<%= resumo.n_vendas %>)</div>
+      <div class="kpi-valor"><%= eur(resumo.movimentos_internos) %></div>
+    </div></div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Dinheiro esperado</div>
+      <div class="kpi-valor"><%= eur(resumo.esperado) %></div>
+    </div></div>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <% var dif = sessao.diferenca === null ? null : Number(sessao.diferenca); %>
+    <div class="card kpi-card h-100 <%= dif === null ? '' : (dif === 0 ? 'text-bg-success' : (dif < 0 ? 'text-bg-danger' : 'text-bg-warning')) %>">
+      <div class="card-body">
+        <div class="kpi-etiqueta">Diferenca</div>
+        <div class="kpi-valor"><%= dif === null ? '-' : eur(dif) %></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100"><div class="card-body">
+      <h2 class="h6 mb-3">Como se chegou ao dinheiro esperado</h2>
+      <ul class="list-group list-group-flush">
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Fundo inicial</span><span><%= eur(resumo.fundo_inicial) %></span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Movimentos internos (<%= resumo.n_vendas %>)</span>
+          <span class="text-success">+ <%= eur(resumo.movimentos_internos) %></span>
+        </li>
+        <% if (resumo.vendas_dinheiro) { %>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Vendas em dinheiro (historico)</span>
+            <span class="text-success">+ <%= eur(resumo.vendas_dinheiro) %></span>
+          </li>
+        <% } %>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Entradas</span><span class="text-success">+ <%= eur(resumo.entradas) %></span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Saidas / sangrias</span>
+          <span class="text-danger">- <%= eur(resumo.saidas + resumo.sangrias) %></span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between fw-bold border-top border-2">
+          <span>Dinheiro esperado</span><span><%= eur(resumo.esperado) %></span>
+        </li>
+        <li class="list-group-item d-flex justify-content-between">
+          <span>Contado</span>
+          <span><%= sessao.total_contado === null ? '-' : eur(sessao.total_contado) %></span>
+        </li>
+      </ul>
+      <p class="small text-body-secondary mt-3 mb-0">
+        <i class="bi bi-credit-card-2-front" aria-hidden="true"></i>
+        Multibanco (historico): <strong><%= eur(resumo.vendas_multibanco) %></strong> —
+        <strong>nao</strong> faz parte do dinheiro fisico esperado em caixa.
+      </p>
+    </div></div>
+  </div>
+
+  <div class="col-lg-6">
+    <dl class="row small">
+      <dt class="col-sm-4">Operador</dt><dd class="col-sm-8"><%= sessao.utilizador_nome %></dd>
+      <dt class="col-sm-4">Aberta</dt><dd class="col-sm-8"><%= dataHoraPT(sessao.aberta_em) %></dd>
+      <dt class="col-sm-4">Fechada</dt><dd class="col-sm-8"><%= dataHoraPT(sessao.fechada_em) || '-' %></dd>
+      <dt class="col-sm-4">Total dos registos</dt><dd class="col-sm-8"><%= eur(resumo.vendas_total) %></dd>
+      <dt class="col-sm-4">Recebido em dinheiro (historico)</dt><dd class="col-sm-8"><%= eur(resumo.vendas_dinheiro) %></dd>
+      <dt class="col-sm-4">Recebido em multibanco (historico)</dt><dd class="col-sm-8"><%= eur(resumo.vendas_multibanco) %></dd>
+      <dt class="col-sm-4">Contado</dt><dd class="col-sm-8"><%= sessao.total_contado === null ? '-' : eur(sessao.total_contado) %></dd>
+    </dl>
+  </div>
+</div>
+
+<h2 class="h6">Movimentos</h2>
+<div class="table-responsive">
+  <table class="table table-sm table-striped tabela-compacta">
+    <thead><tr><th scope="col">Data</th><th scope="col">Tipo</th><th scope="col" class="text-end">Valor</th><th scope="col">Descricao</th></tr></thead>
+    <tbody>
+      <% movimentos.forEach(function (m) { %>
+        <tr>
+          <td><%= dataHoraPT(m.criado_em) %></td>
+          <td><span class="badge text-bg-<%= m.tipo === 'entrada' ? 'success' : (m.tipo === 'saida' ? 'warning' : 'danger') %>"><%= m.tipo %></span></td>
+          <td class="text-end"><%= eur(m.valor) %></td>
+          <td><%= m.descricao %></td>
+        </tr>
+      <% }); %>
+      <% if (!movimentos.length) { %>
+        <tr data-sem-dados="1"><td colspan="4" class="text-body-secondary">Sem movimentos.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<a class="btn btn-outline-secondary" href="/caixa"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar</a>

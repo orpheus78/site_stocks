@@ -1,0 +1,130 @@
+<%#
+  Dashboard: KPIs de hoje, top 5 artigos, alertas de stock e ultimos 7 dias.
+  Dados: hoje, resumoHoje, ultimos7Dias, top5, stockBaixo.
+%>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-speedometer2" aria-hidden="true"></i> Dashboard</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="/admin/relatorios"><i class="bi bi-graph-up" aria-hidden="true"></i> Relatorios</a>
+    <a class="btn btn-primary btn-sm" href="/pos"><i class="bi bi-basket" aria-hidden="true"></i> Registar movimentos</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card text-bg-primary h-100"><div class="card-body">
+      <div class="kpi-etiqueta">Consumo hoje</div>
+      <div class="kpi-valor"><%= eur(resumoHoje.total) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Nº de movimentos</div>
+      <div class="kpi-valor"><%= resumoHoje.n_vendas %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Valor medio</div>
+      <div class="kpi-valor"><%= eur(resumoHoje.ticket_medio) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <a class="text-decoration-none" href="/admin/stocks?baixo=1">
+      <div class="card kpi-card h-100 <%= stockBaixo.length ? 'text-bg-warning' : '' %>"><div class="card-body">
+        <div class="kpi-etiqueta <%= stockBaixo.length ? '' : 'text-body-secondary' %>">Alertas de stock</div>
+        <div class="kpi-valor"><%= stockBaixo.length %></div>
+      </div></div>
+    </a>
+  </div>
+</div>
+
+<%#
+  "Consumo hoje" e o total dos movimentos registados — a MESMA base que o fecho
+  de caixa usa para os movimentos internos (nao ha duas contas).
+  Os KPI de dinheiro/multibanco abaixo referem-se apenas ao HISTORICO de vendas
+  com pagamento, por isso a linha desaparece quando nao ha nada a mostrar.
+%>
+<% if (Number(resumoHoje.dinheiro) || Number(resumoHoje.multibanco)) { %>
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="kpi-etiqueta text-body-secondary">Dinheiro (hoje)</div>
+        <div class="h5 mb-0"><%= eur(resumoHoje.dinheiro) %></div>
+      </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="card h-100"><div class="card-body">
+        <div class="kpi-etiqueta text-body-secondary">Multibanco (hoje)</div>
+        <div class="h5 mb-0"><%= eur(resumoHoje.multibanco) %></div>
+      </div></div>
+    </div>
+  </div>
+<% } %>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <h2 class="h6">Top 5 artigos de hoje</h2>
+    <div class="table-responsive">
+      <table class="table table-sm tabela-compacta">
+        <thead><tr><th scope="col">Artigo</th><th scope="col" class="text-end">Qtd</th><th scope="col" class="text-end">Total</th></tr></thead>
+        <tbody>
+          <% top5.forEach(function (a) { %>
+            <tr>
+              <td><%= a.nome %></td>
+              <td class="text-end"><%= Number(a.quantidade) %></td>
+              <td class="text-end"><%= eur(a.total) %></td>
+            </tr>
+          <% }); %>
+          <% if (!top5.length) { %>
+            <tr data-sem-dados="1"><td colspan="3" class="text-body-secondary">Sem movimentos hoje.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <h2 class="h6">
+      Stock baixo
+      <% if (stockBaixo.length) { %><span class="badge text-bg-warning"><%= stockBaixo.length %></span><% } %>
+    </h2>
+    <div class="table-responsive">
+      <table class="table table-sm tabela-compacta">
+        <thead><tr><th scope="col">Artigo</th><th scope="col" class="text-end">Stock</th><th scope="col" class="text-end">Minimo</th><th scope="col"></th></tr></thead>
+        <tbody>
+          <% stockBaixo.forEach(function (s) { %>
+            <tr class="<%= Number(s.quantidade) < 0 ? 'table-danger' : 'table-warning' %>">
+              <td><%= s.artigo_nome %></td>
+              <td class="text-end fw-bold"><%= Number(s.quantidade) %> <%= s.unidade %></td>
+              <td class="text-end"><%= Number(s.stock_minimo) %></td>
+              <td class="text-end"><a class="btn btn-outline-dark btn-sm" href="/admin/stocks?baixo=1">Repor</a></td>
+            </tr>
+          <% }); %>
+          <% if (!stockBaixo.length) { %>
+            <tr data-sem-dados="1"><td colspan="4" class="text-body-secondary">Sem alertas. Tudo acima do minimo.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<h2 class="h6 mt-4">Ultimos 7 dias</h2>
+<%
+  var maxDia = 0;
+  ultimos7Dias.forEach(function (d) { maxDia = Math.max(maxDia, Number(d.total)); });
+%>
+<div class="grafico-barras mb-4" style="max-width: 720px;">
+  <% ultimos7Dias.forEach(function (d) { %>
+    <% var pct = maxDia > 0 ? Math.round((Number(d.total) / maxDia) * 100) : 0; %>
+    <div class="grafico-linha">
+      <span class="text-body-secondary"><%= d.dia instanceof Date ? d.dia.toLocaleDateString('pt-PT') : d.dia %></span>
+      <span class="grafico-barra"><span style="width: <%= pct %>%"></span></span>
+      <span class="grafico-valor"><%= eur(d.total) %></span>
+    </div>
+  <% }); %>
+  <% if (!ultimos7Dias.length) { %>
+    <p class="text-body-secondary mb-0">Sem movimentos nos ultimos 7 dias.</p>
+  <% } %>
+</div>

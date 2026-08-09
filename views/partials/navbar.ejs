@@ -1,0 +1,39 @@
+<nav class="navbar navbar-expand-lg bg-dark border-bottom border-body" data-bs-theme="dark">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="/pos"><i class="bi bi-cup-hot"></i> <%= appNome %></a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navPrincipal">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navPrincipal">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <%# O acesso ao ecra de registo faz-se pela marca "Bar do Campo", que aponta
+            para /pos. Evita-se assim ter dois "Movimentos Internos" na mesma barra. %>
+        <%# Caixa e backoffice sao exclusivos do admin (ver src/middleware/auth.js). %>
+        <% if (isAdmin) { %>
+          <li class="nav-item"><a class="nav-link<%= currentPath.startsWith('/caixa') ? ' active' : '' %>" href="/caixa"><i class="bi bi-cash-coin"></i> Caixa</a></li>
+          <li class="nav-item"><a class="nav-link<%= currentPath === '/admin' ? ' active' : '' %>" href="/admin"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Gestao</a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" href="/admin/artigos">Artigos</a></li>
+              <li><a class="dropdown-item" href="/admin/categorias">Categorias</a></li>
+              <li><a class="dropdown-item" href="/admin/stocks">Stocks</a></li>
+              <li><a class="dropdown-item" href="/admin/movimentos">Movimentos de stock</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item<%= currentPath.startsWith('/admin/vendas') ? ' active' : '' %>" href="/admin/vendas">Movimentos Internos</a></li>
+              <li><a class="dropdown-item" href="/admin/relatorios">Relatorios</a></li>
+            </ul>
+          </li>
+        <% } %>
+      </ul>
+      <% if (utilizador) { %>
+        <span class="navbar-text me-3"><i class="bi bi-person-circle"></i> <%= utilizador.nome %> (<%= utilizador.role %>)</span>
+        <form method="post" action="/logout" class="d-inline">
+          <button class="btn btn-outline-light btn-sm" type="submit"><i class="bi bi-box-arrow-right"></i> Sair</button>
+        </form>
+      <% } else { %>
+        <a class="btn btn-outline-light btn-sm" href="/login">Entrar</a>
+      <% } %>
+    </div>
+  </div>
+</nav>

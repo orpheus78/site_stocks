@@ -1,0 +1,91 @@
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-receipt" aria-hidden="true"></i> Movimentos Internos</h1>
+  <span class="badge text-bg-primary fs-6">Total no periodo: <%= eur(totalPeriodo) %></span>
+</div>
+
+<form class="row g-2 mb-3 align-items-end" method="get">
+  <div class="col-sm-2">
+    <label class="form-label" for="fDe">De</label>
+    <input type="date" class="form-control" id="fDe" name="de" value="<%= filtros.de %>">
+  </div>
+  <div class="col-sm-2">
+    <label class="form-label" for="fAte">Ate</label>
+    <input type="date" class="form-control" id="fAte" name="ate" value="<%= filtros.ate %>">
+  </div>
+  <div class="col-sm-2">
+    <label class="form-label" for="fEstado">Estado</label>
+    <select class="form-select" id="fEstado" name="estado">
+      <option value="">Todos</option>
+      <option value="concluida" <%= filtros.estado === 'concluida' ? 'selected' : '' %>>Concluidas</option>
+      <option value="anulada" <%= filtros.estado === 'anulada' ? 'selected' : '' %>>Anuladas</option>
+    </select>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-primary">Filtrar</button></div>
+  <div class="col-auto"><a class="btn btn-link" href="/admin/vendas">Limpar</a></div>
+</form>
+
+<%#
+  O filtro por metodo de pagamento foi retirado da interface: os movimentos
+  internos nao tem pagamento e a coluna deixou de existir na listagem. O
+  parametro ?metodo= continua a ser aceite pelo servidor (nao partir URLs
+  guardadas), por isso avisa-se aqui quando esta activo -- filtrar em silencio
+  sem o utilizador perceber porque faltam linhas seria pior do que nao filtrar.
+%>
+<% if (filtros.metodo) { %>
+  <div class="alert alert-info d-flex flex-wrap align-items-center gap-2">
+    <i class="bi bi-funnel" aria-hidden="true"></i>
+    <span>A mostrar apenas os registos com pagamento <strong><%= filtros.metodo %></strong>.</span>
+    <a class="btn btn-sm btn-outline-primary ms-auto"
+       href="/admin/vendas?de=<%= filtros.de %>&ate=<%= filtros.ate %><%= filtros.estado ? '&estado=' + filtros.estado : '' %>">
+      Mostrar todos
+    </a>
+  </div>
+<% } %>
+
+<div class="table-responsive">
+  <table class="table table-hover tabela-compacta align-middle">
+    <thead>
+      <tr>
+        <th scope="col">#</th><th scope="col">Data</th><th scope="col" class="text-end">Itens</th>
+        <th scope="col" class="text-end">Total</th>
+        <th scope="col">Operador</th><th scope="col">Estado</th><th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <%# 7 colunas: #, Data, Itens, Total, Operador, Estado e accoes. Manter o colspan
+          da linha "sem dados" em sincronia com este numero. %>
+      <% vendas.forEach(function (v) { %>
+        <tr class="<%= v.estado === 'anulada' ? 'text-body-secondary' : '' %>">
+          <td><a href="/admin/vendas/<%= v.id %>" class="fw-semibold">#<%= v.numero %></a></td>
+          <td class="text-nowrap"><%= dataHoraPT(v.criado_em) %></td>
+          <td class="text-end"><%= Number(v.n_itens) %></td>
+          <td class="text-end fw-semibold <%= v.estado === 'anulada' ? 'text-decoration-line-through' : '' %>"><%= eur(v.total) %></td>
+          <%# O metodo de pagamento saiu da listagem; continua visivel no detalhe
+              de cada registo, onde o historico antigo ainda interessa. %>
+          <td class="small"><%= v.utilizador_nome || '-' %></td>
+          <td><span class="badge text-bg-<%= v.estado === 'concluida' ? 'success' : 'danger' %>"><%= v.estado %></span></td>
+          <td class="text-end text-nowrap">
+            <a class="btn btn-outline-secondary btn-sm" href="/admin/vendas/<%= v.id %>"
+               aria-label="Ver detalhe do movimento <%= v.numero %>"><i class="bi bi-eye" aria-hidden="true"></i></a>
+            <% if (v.estado === 'concluida') { %>
+              <%# Confirmacao pelo modal da aplicacao (/js/confirmar.js): zero JS inline.
+                  O que era "\n\n" na mensagem nativa e agora o paragrafo `detalhe`. %>
+              <form method="post" action="/admin/vendas/<%= v.id %>/anular" class="d-inline"
+                    data-confirmar="ANULAR o movimento #<%= v.numero %> de <%= eur(v.total) %>?"
+                    data-confirmar-titulo="Anular movimento"
+                    data-confirmar-detalhe="O stock dos artigos sera reposto. Esta accao nao pode ser desfeita."
+                    data-confirmar-ok="Anular movimento"
+                    data-confirmar-perigo="1">
+                <button class="btn btn-outline-danger btn-sm" aria-label="Anular movimento <%= v.numero %>">Anular</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (!vendas.length) { %>
+        <tr data-sem-dados="1"><td colspan="7" class="text-body-secondary">Sem movimentos no periodo seleccionado.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+<p class="text-body-secondary small">Mostra no maximo os <%= filtros.limite %> movimentos mais recentes do periodo.</p>

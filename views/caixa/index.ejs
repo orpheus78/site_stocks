@@ -1,0 +1,281 @@
+<%#
+  Ecra de caixa — pensado para ser usado no mesmo ecra touch do POS.
+  Dados: estado {sessao, movimentos, totais, resumo}, historico.
+  Campos dos forms conforme os validators em routes/caixa.routes.js:
+    /caixa/abrir      -> fundo_inicial
+    /caixa/movimento  -> tipo, valor, descricao
+    /caixa/fechar     -> total_contado
+%>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-cash-coin" aria-hidden="true"></i> Caixa</h1>
+  <div class="d-flex align-items-center gap-2">
+    <% if (estado.sessao) { %>
+      <span class="badge text-bg-success caixa-estado-badge"><i class="bi bi-unlock" aria-hidden="true"></i> Aberta</span>
+    <% } else { %>
+      <span class="badge text-bg-secondary caixa-estado-badge"><i class="bi bi-lock" aria-hidden="true"></i> Fechada</span>
+    <% } %>
+    <a class="btn btn-outline-secondary" href="/pos"><i class="bi bi-basket" aria-hidden="true"></i> Voltar ao POS</a>
+  </div>
+</div>
+
+<% if (estado.semSessao && estado.semSessao.n_vendas > 0) { %>
+  <%#
+    Movimentos registados sem caixa aberta: como os movimentos internos contam
+    para o dinheiro esperado, estes ficaram fora de QUALQUER fecho de caixa.
+    O registo nunca e bloqueado (o funcionario nao pode ficar parado), mas o
+    problema tem de ser visivel ao responsavel.
+  %>
+  <div class="alert alert-warning d-flex gap-2 align-items-start" role="alert">
+    <i class="bi bi-exclamation-triangle-fill fs-4" aria-hidden="true"></i>
+    <div>
+      <strong>
+        <%= estado.semSessao.n_vendas %>
+        movimento<%= estado.semSessao.n_vendas === 1 ? '' : 's' %> sem caixa associada,
+        num total de <%= eur(estado.semSessao.total) %>.
+      </strong>
+      <div class="small">
+        Foram registados com a caixa fechada, por isso <strong>nao entram</strong> no dinheiro
+        esperado de nenhuma sessao. Abra a caixa antes do servico para que os movimentos
+        seguintes fiquem contabilizados.
+      </div>
+    </div>
+  </div>
+<% } %>
+
+<% if (!estado.sessao) { %>
+
+  <!-- ================= ABRIR CAIXA ================= -->
+  <div class="card shadow-sm mb-4" style="max-width: 560px;">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Abrir caixa</h2>
+      <p class="text-body-secondary">Indique o fundo inicial (dinheiro que fica na caixa para trocos).</p>
+
+      <form method="post" action="/caixa/abrir">
+        <label class="form-label" for="fundo_inicial">Fundo inicial (€)</label>
+        <%#
+          type="text" + inputmode="decimal" (nao type="number"): o teclado
+          nativo continua numerico em tablets, mas estados intermedios como
+          "20," deixam de ser descartados pelo browser. Ver public/js/app.js.
+        %>
+        <input type="text" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?"
+               autocomplete="off" data-campo-decimal
+               class="form-control form-control-lg valor-grande mb-3"
+               id="fundo_inicial" name="fundo_inicial" value="" placeholder="0,00" required>
+
+        <div class="teclado-num mb-3" data-alvo="fundo_inicial" role="group" aria-label="Teclado numerico">
+          <button type="button" data-tecla="1">1</button>
+          <button type="button" data-tecla="2">2</button>
+          <button type="button" data-tecla="3">3</button>
+          <button type="button" data-tecla="4">4</button>
+          <button type="button" data-tecla="5">5</button>
+          <button type="button" data-tecla="6">6</button>
+          <button type="button" data-tecla="7">7</button>
+          <button type="button" data-tecla="8">8</button>
+          <button type="button" data-tecla="9">9</button>
+          <button type="button" data-tecla="," aria-label="Virgula decimal">,</button>
+          <button type="button" data-tecla="0">0</button>
+          <button type="button" data-tecla="apagar" aria-label="Apagar ultimo digito"><i class="bi bi-backspace" aria-hidden="true"></i></button>
+          <button type="button" data-tecla="limpar" aria-label="Limpar valor">C</button>
+        </div>
+
+        <button class="btn btn-success btn-toque w-100" type="submit">
+          <i class="bi bi-unlock" aria-hidden="true"></i> ABRIR CAIXA
+        </button>
+      </form>
+    </div>
+  </div>
+
+<% } else { %>
+
+  <div class="row g-3 mb-4">
+    <!-- ================= RESUMO ================= -->
+    <div class="col-lg-5">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 text-body-secondary">
+            Aberta em <%= dataHoraPT(estado.sessao.aberta_em) %> por <%= estado.sessao.utilizador_nome %>
+          </h2>
+
+          <%#
+            Parcelas que compoem o dinheiro esperado, pela mesma ordem da conta:
+              fundo + movimentos internos + vendas antigas em dinheiro
+              + entradas - saidas - sangrias
+            O multibanco aparece a parte, fora da conta.
+          %>
+          <ul class="list-group list-group-flush my-3">
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Fundo inicial</span><span><%= eur(estado.resumo.fundo_inicial) %></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Movimentos internos (<%= estado.resumo.n_vendas %>)</span>
+              <span class="text-success">+ <%= eur(estado.resumo.movimentos_internos) %></span>
+            </li>
+            <% if (estado.resumo.vendas_dinheiro) { %>
+              <li class="list-group-item d-flex justify-content-between">
+                <span>Vendas em dinheiro (historico)</span>
+                <span class="text-success">+ <%= eur(estado.resumo.vendas_dinheiro) %></span>
+              </li>
+            <% } %>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Entradas</span><span class="text-success">+ <%= eur(estado.resumo.entradas) %></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Saidas / sangrias</span>
+              <span class="text-danger">- <%= eur(estado.resumo.saidas + estado.resumo.sangrias) %></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between ps-4 small text-body-secondary">
+              <span>— saidas</span><span>- <%= eur(estado.resumo.saidas) %></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between ps-4 small text-body-secondary">
+              <span>— sangrias</span><span>- <%= eur(estado.resumo.sangrias) %></span>
+            </li>
+          </ul>
+
+          <div class="kpi-card border rounded p-3 mb-3">
+            <div class="kpi-etiqueta text-body-secondary">Dinheiro esperado em caixa</div>
+            <div class="kpi-valor"><%= eur(estado.resumo.esperado) %></div>
+          </div>
+
+          <p class="small text-body-secondary mb-0">
+            <i class="bi bi-credit-card-2-front" aria-hidden="true"></i>
+            Multibanco (historico): <strong><%= eur(estado.resumo.vendas_multibanco) %></strong> —
+            <strong>nao</strong> faz parte do dinheiro fisico esperado em caixa.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MOVIMENTO ================= -->
+    <div class="col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Registar movimento</h2>
+          <form method="post" action="/caixa/movimento">
+            <div class="mb-2">
+              <label class="form-label" for="movCaixaTipo">Tipo</label>
+              <select class="form-select form-select-lg" id="movCaixaTipo" name="tipo" required>
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saida</option>
+                <option value="sangria">Sangria</option>
+              </select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="movCaixaValor">Valor (€)</label>
+              <input type="text" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?"
+                     autocomplete="off" data-campo-decimal
+                     class="form-control form-control-lg" id="movCaixaValor" name="valor"
+                     placeholder="0,00" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="movCaixaDescricao">Descricao</label>
+              <input class="form-control" id="movCaixaDescricao" name="descricao" maxlength="255"
+                     placeholder="Ex.: compra de gelo">
+            </div>
+            <button class="btn btn-outline-primary btn-toque w-100" type="submit">
+              <i class="bi bi-plus-slash-minus" aria-hidden="true"></i> Registar
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= FECHAR ================= -->
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm border-danger-subtle">
+        <div class="card-body">
+          <h2 class="h6 mb-3">Fechar caixa</h2>
+          <%# A mensagem final e construida em /js/app.js (leva o valor contado);
+              o atributo garante o mecanismo mesmo que o JS especifico falhe. %>
+          <form method="post" action="/caixa/fechar" id="formFecharCaixa"
+                data-confirmar="Fechar a caixa com o valor contado?"
+                data-confirmar-titulo="Fechar caixa"
+                data-confirmar-detalhe="A sessao fica fechada e a diferenca entre o esperado e o contado e registada."
+                data-confirmar-ok="Fechar caixa"
+                data-confirmar-perigo="1">
+            <label class="form-label" for="total_contado">Valor contado na caixa (€)</label>
+            <input type="text" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?"
+                   autocomplete="off" data-campo-decimal
+                   class="form-control form-control-lg valor-grande" id="total_contado"
+                   name="total_contado" placeholder="0,00" required>
+
+            <p class="caixa-diferenca" id="caixaDiferenca"
+               data-esperado="<%= estado.resumo.esperado %>" role="status" hidden></p>
+
+            <div class="teclado-num my-3" data-alvo="total_contado" role="group" aria-label="Teclado numerico">
+              <button type="button" data-tecla="1">1</button>
+              <button type="button" data-tecla="2">2</button>
+              <button type="button" data-tecla="3">3</button>
+              <button type="button" data-tecla="4">4</button>
+              <button type="button" data-tecla="5">5</button>
+              <button type="button" data-tecla="6">6</button>
+              <button type="button" data-tecla="7">7</button>
+              <button type="button" data-tecla="8">8</button>
+              <button type="button" data-tecla="9">9</button>
+              <button type="button" data-tecla="," aria-label="Virgula decimal">,</button>
+              <button type="button" data-tecla="0">0</button>
+              <button type="button" data-tecla="apagar" aria-label="Apagar ultimo digito"><i class="bi bi-backspace" aria-hidden="true"></i></button>
+              <button type="button" data-tecla="limpar" aria-label="Limpar valor">C</button>
+            </div>
+
+            <button class="btn btn-danger btn-toque w-100" type="submit">
+              <i class="bi bi-lock" aria-hidden="true"></i> FECHAR CAIXA
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="h6">Movimentos da sessao</h2>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped tabela-compacta">
+      <thead><tr><th scope="col">Data</th><th scope="col">Tipo</th><th scope="col" class="text-end">Valor</th><th scope="col">Descricao</th></tr></thead>
+      <tbody>
+        <% estado.movimentos.forEach(function (m) { %>
+          <tr>
+            <td><%= dataHoraPT(m.criado_em) %></td>
+            <td>
+              <span class="badge text-bg-<%= m.tipo === 'entrada' ? 'success' : (m.tipo === 'saida' ? 'warning' : 'danger') %>"><%= m.tipo %></span>
+            </td>
+            <td class="text-end"><%= eur(m.valor) %></td>
+            <td><%= m.descricao %></td>
+          </tr>
+        <% }); %>
+        <% if (!estado.movimentos.length) { %>
+          <tr data-sem-dados="1"><td colspan="4" class="text-body-secondary">Sem movimentos nesta sessao.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+
+<% } %>
+
+<h2 class="h6 mt-4">Historico de sessoes</h2>
+<div class="table-responsive">
+  <table class="table table-sm table-hover tabela-compacta">
+    <thead>
+      <tr>
+        <th scope="col">#</th><th scope="col">Aberta</th><th scope="col">Fechada</th><th scope="col">Operador</th>
+        <th scope="col" class="text-end">Contado</th><th scope="col" class="text-end">Diferenca</th><th scope="col">Estado</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% historico.forEach(function (s) { %>
+        <tr>
+          <td><a href="/caixa/sessao/<%= s.id %>"><%= s.id %></a></td>
+          <td><%= dataHoraPT(s.aberta_em) %></td>
+          <td><%= dataHoraPT(s.fechada_em) || '-' %></td>
+          <td><%= s.utilizador_nome %></td>
+          <td class="text-end"><%= s.total_contado === null ? '-' : eur(s.total_contado) %></td>
+          <td class="text-end <%= s.diferenca === null ? '' : (Number(s.diferenca) < 0 ? 'text-danger fw-bold' : (Number(s.diferenca) > 0 ? 'text-warning-emphasis fw-bold' : 'text-success')) %>">
+            <%= s.diferenca === null ? '-' : eur(s.diferenca) %>
+          </td>
+          <td><span class="badge text-bg-<%= s.estado === 'aberta' ? 'success' : 'secondary' %>"><%= s.estado %></span></td>
+        </tr>
+      <% }); %>
+      <% if (!historico.length) { %>
+        <tr data-sem-dados="1"><td colspan="7" class="text-body-secondary">Sem sessoes registadas.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,41 @@
+{
+  "name": "bar-campo-gestao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicacao de gestao para bar de campo de futebol (POS + backoffice)",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:schema": "node db/apply-schema.js",
+    "db:seed": "node db/seed.js",
+    "db:setup": "npm run db:schema && npm run db:seed",
+    "db:up": "docker compose up -d db && npm run db:wait && npm run db:grants",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f db",
+    "db:wait": "node db/wait-for-db.js",
+    "db:grants": "node db/grant-privileges.js",
+    "db:reset": "docker compose down -v && npm run db:up && npm run db:setup",
+    "db:cli": "docker compose exec db sh -c 'mariadb -u\"$MARIADB_USER\" -p\"$MARIADB_PASSWORD\" \"$MARIADB_DATABASE\"'",
+    "db:tools": "docker compose --profile tools up -d adminer",
+    "check": "node -e \"require('./src/app.js'); console.log('app.js OK')\"",
+    "test": "node --test --test-force-exit tests/unit/*.test.js tests/integration/*.test.js tests/e2e/*.test.js",
+    "test:e2e": "node --test --test-force-exit tests/e2e/*.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "ejs": "^3.1.10",
+    "express": "^5.0.1",
+    "express-session": "^1.18.1",
+    "express-validator": "^7.2.0",
+    "mariadb": "^3.4.0",
+    "multer": "^2.0.1"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}

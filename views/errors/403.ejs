@@ -1,9 +1,22 @@
+<%#
+  403 partilhado. Por omissao explica a separacao de perfis (o caso do
+  funcionario a tentar entrar no backoffice). Quem tiver um motivo concreto
+  passa `mensagem` -- e o caso da anulacao recusada no GIM, onde dizer so
+  "sem permissoes" nao ajudaria ninguem ao balcao.
+%>
+<% var msg403 = typeof mensagem !== 'undefined' && mensagem ? mensagem : null; %>
+<% var url403 = typeof voltarUrl !== 'undefined' && voltarUrl ? voltarUrl : '/gim'; %>
+<% var txt403 = typeof voltarTexto !== 'undefined' && voltarTexto ? voltarTexto : 'Voltar aos Movimentos Internos'; %>
 <div class="text-center py-5">
   <i class="bi bi-shield-lock display-1 text-warning"></i>
   <h1 class="h3 mt-3">403 &middot; Sem permissoes</h1>
   <p class="text-body-secondary">
-    Esta area e reservada ao responsavel (perfil <strong>admin</strong>).<br>
-    Com o perfil de funcionario pode registar movimentos internos.
+    <% if (msg403) { %>
+      <%= msg403 %>
+    <% } else { %>
+      Esta area e reservada ao responsavel (perfil <strong>admin</strong>).<br>
+      Com o perfil de funcionario pode registar movimentos internos.
+    <% } %>
   </p>
-  <a class="btn btn-primary btn-lg" href="/gim"><i class="bi bi-basket"></i> Voltar aos Movimentos Internos</a>
+  <a class="btn btn-primary btn-lg" href="<%= url403 %>"><i class="bi bi-basket"></i> <%= txt403 %></a>
 </div>

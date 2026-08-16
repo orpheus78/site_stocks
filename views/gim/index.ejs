@@ -18,6 +18,11 @@
     </div>
 
     <div class="gim-topo-acoes">
+      <%# Consulta do proprio turno: disponivel a qualquer operador. O filtro
+          por utilizador e imposto no SERVIDOR (ver meusMovimentos.controller). %>
+      <a class="gim-mini-btn" href="/gim/meus-movimentos" aria-label="Ver os meus movimentos">
+        <i class="bi bi-clipboard-check" aria-hidden="true"></i><span>Os meus movimentos</span>
+      </a>
       <%# Caixa e backoffice so existem para o admin; o funcionario apenas regista movimentos. %>
       <% if (isAdmin) { %>
         <a class="gim-mini-btn" href="/caixa" aria-label="Ir para a caixa"><i class="bi bi-cash-coin" aria-hidden="true"></i><span>Caixa</span></a>

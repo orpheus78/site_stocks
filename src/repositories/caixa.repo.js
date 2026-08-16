@@ -121,9 +121,27 @@ async function historico(limite = 50, conn) {
   );
 }
 
+/**
+ * Le uma sessao de caixa BLOQUEANDO a linha (FOR UPDATE), para decidir se
+ * ainda esta aberta sem deixar janela de corrida.
+ *
+ * Usado pela anulacao feita pelo proprio operador: entre "verifiquei que a
+ * caixa esta aberta" e "gravei a anulacao" nao pode caber um fecho de caixa.
+ * Com o bloqueio, um `UPDATE sessoes_caixa SET estado='fechada'` concorrente
+ * fica a espera do commit desta transacao (mesmo padrao do FOR UPDATE usado
+ * na numeracao dos consumos).
+ *
+ * Exige `conn` de proposito: fora de uma transacao o bloqueio nao teria efeito.
+ */
+async function porIdParaAtualizar(id, conn) {
+  const rows = await conn.query('SELECT id, estado FROM sessoes_caixa WHERE id = ? FOR UPDATE', [id]);
+  return rows[0] || null;
+}
+
 module.exports = {
   sessaoAberta,
   porId,
+  porIdParaAtualizar,
   abrir,
   fechar,
   registarMovimento,

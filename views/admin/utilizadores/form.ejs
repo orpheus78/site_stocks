@@ -1,0 +1,75 @@
+<%#
+  Formulario de utilizador. Campos conforme os validators em
+  src/routes/utilizadores.routes.js: nome, username, password, pin, role, ativo.
+
+  CREDENCIAIS: os campos de password e de PIN sao SEMPRE servidos VAZIOS. Nao
+  existe forma de os preencher a partir da base de dados (so la esta o hash
+  bcrypt) nem interesse em faze-lo. Na EDICAO, deixar em branco significa
+  "manter o que esta" -- ver utilizadores.service.atualizar.
+%>
+<h1 class="h4 mb-3"><%= titulo %></h1>
+
+<form method="post" action="<%= alvo ? '/admin/utilizadores/' + alvo.id : '/admin/utilizadores' %>"
+      class="row g-3" style="max-width: 720px;" autocomplete="off">
+
+  <div class="col-md-6">
+    <label class="form-label" for="nome">Nome</label>
+    <input class="form-control form-control-lg" id="nome" name="nome" maxlength="120" required
+           autofocus value="<%= alvo ? alvo.nome : '' %>">
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label" for="username">Nome de utilizador</label>
+    <input class="form-control form-control-lg" id="username" name="username" maxlength="60" required
+           autocomplete="off" value="<%= alvo ? alvo.username : '' %>">
+    <div class="form-text">Letras, numeros, ponto, hifen e underscore. Tem de ser unico.</div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label" for="password">
+      Password<% if (alvo) { %> <span class="text-body-secondary">(em branco = nao alterar)</span><% } %>
+    </label>
+    <input type="password" class="form-control form-control-lg" id="password" name="password"
+           maxlength="200" autocomplete="new-password" <%= alvo ? '' : 'required' %>>
+    <div class="form-text">Minimo 8 caracteres. Guardada apenas como hash bcrypt.</div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label" for="pin">
+      PIN (4 digitos)<% if (alvo) { %> <span class="text-body-secondary">(em branco = nao alterar)</span><% } %>
+    </label>
+    <input type="password" class="form-control form-control-lg" id="pin" name="pin"
+           inputmode="numeric" maxlength="4" pattern="[0-9]{4}"
+           autocomplete="new-password" <%= alvo ? '' : 'required' %>>
+    <div class="form-text">
+      Entrada rapida no ecra de registo (GIM). Tem de ser diferente do de todos os outros utilizadores.
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <label class="form-label" for="role">Perfil</label>
+    <select class="form-select form-select-lg" id="role" name="role" required>
+      <option value="funcionario" <%= !alvo || alvo.role === 'funcionario' ? 'selected' : '' %>>
+        funcionario — so o ecra de registo (GIM)
+      </option>
+      <option value="admin" <%= alvo && alvo.role === 'admin' ? 'selected' : '' %>>
+        admin — backoffice, caixa e GIM
+      </option>
+    </select>
+  </div>
+
+  <div class="col-md-6 d-flex align-items-end">
+    <div class="form-check form-switch">
+      <input type="checkbox" class="form-check-input" id="ativo" name="ativo" value="1"
+             <%= !alvo || Number(alvo.ativo) === 1 ? 'checked' : '' %>>
+      <label class="form-check-label" for="ativo">Activo (pode entrar na aplicacao)</label>
+    </div>
+  </div>
+
+  <div class="col-12 d-flex gap-2">
+    <button class="btn btn-primary btn-toque px-4" type="submit">
+      <i class="bi bi-check-lg" aria-hidden="true"></i> Guardar
+    </button>
+    <a class="btn btn-outline-secondary btn-toque px-4" href="/admin/utilizadores">Cancelar</a>
+  </div>
+</form>

@@ -223,11 +223,88 @@ async function criarConsumo({ itens, pagamento, utilizadorId }) {
   });
 }
 
-/** Anula um consumo concluido e repoe o stock dos seus itens. */
-async function anularConsumo(consumoId, utilizadorId) {
+/**
+ * MENSAGEM UNICA de recusa da anulacao feita pelo proprio operador.
+ *
+ * E deliberadamente a mesma para todas as condicoes que falham (nao e teu,
+ * ja esta anulado, nao tem caixa, a caixa fechou). Distinguir os casos
+ * revelaria a existencia e o estado de movimentos de outras pessoas a quem
+ * so tem de saber que nao pode.
+ */
+const MSG_ANULAR_RECUSADO =
+  'So pode anular movimentos seus enquanto a caixa estiver aberta. Peca ao responsavel.';
+
+/**
+ * Espelho PURO das condicoes acima, para o ecra decidir se mostra o botao
+ * "Anular". E so usabilidade: a autorizacao a serio e a de cima, no servidor,
+ * dentro da transacao. Esconder o botao nunca e a proteccao.
+ *
+ * Recebe uma linha de `listarDoUtilizador` (traz `sessao_estado` do LEFT JOIN).
+ */
+function podeOperadorAnular(consumo, operadorId) {
+  if (!consumo) return false;
+  if (Number(consumo.utilizador_id) !== Number(operadorId)) return false;
+  if (consumo.estado !== 'concluida') return false;
+  if (!consumo.sessao_caixa_id) return false;
+  return consumo.sessao_estado === 'aberta';
+}
+
+/**
+ * Condicoes para um OPERADOR (perfil funcionario) poder anular um consumo.
+ * Todas verificadas no servidor, com o consumo ja bloqueado pela transacao:
+ *
+ *  1. o consumo e dele (`utilizador_id` da BD contra o id da SESSAO);
+ *  2. esta `concluida` (nao se anula duas vezes);
+ *  3. tem sessao de caixa associada E essa sessao ainda esta aberta.
+ *
+ * A condicao 3 exclui de proposito os consumos ORFAOS (registados sem caixa
+ * aberta, com `sessao_caixa_id` NULL): esses ficaram fora de qualquer fecho e
+ * so o admin lhes pode tocar.
+ *
+ * A sessao e lida com FOR UPDATE para que um fecho de caixa concorrente fique
+ * a espera do commit desta transacao -- sem isso haveria uma janela entre a
+ * verificacao e a escrita.
+ */
+async function garantirOperadorPodeAnular(conn, consumo, operadorId) {
+  const recusar = () => {
+    throw new AppError(MSG_ANULAR_RECUSADO, 403);
+  };
+
+  if (Number(consumo.utilizador_id) !== Number(operadorId)) recusar();
+  if (consumo.estado !== 'concluida') recusar();
+  if (!consumo.sessao_caixa_id) recusar();
+
+  const sessao = await caixaRepo.porIdParaAtualizar(consumo.sessao_caixa_id, conn);
+  if (!sessao || sessao.estado !== 'aberta') recusar();
+}
+
+/**
+ * Anula um consumo concluido e repoe o stock dos seus itens.
+ *
+ * `opcoes.exigirDonoId` liga as restricoes do OPERADOR (perfil funcionario):
+ * so anula movimentos seus, ainda `concluida`, e so enquanto a sessao de caixa
+ * em que foram registados continuar aberta. Sem essa opcao (caso do admin) o
+ * comportamento e o de sempre: anula qualquer consumo.
+ *
+ * As verificacoes correm DENTRO da transacao e com as linhas bloqueadas
+ * (consumo e sessao de caixa), para nao existir janela entre verificar e
+ * escrever.
+ */
+async function anularConsumo(consumoId, utilizadorId, opcoes = {}) {
+  const donoExigido = Number(opcoes.exigirDonoId);
+  const comRestricoes = Number.isInteger(donoExigido) && donoExigido > 0;
+
   return db.transaction(async (conn) => {
     const consumo = await consumosRepo.porIdParaAtualizar(consumoId, conn);
     if (!consumo) throw new AppError('Movimento nao encontrado.', 404);
+
+    // Antes de tudo o resto: quem nao pode, nao pode. A mensagem e sempre a
+    // mesma, seja qual for a condicao que falhou -- assim nao revela nada
+    // sobre movimentos de outras pessoas.
+    if (comRestricoes) {
+      await garantirOperadorPodeAnular(conn, consumo, donoExigido);
+    }
+
     if (consumo.estado === 'anulada') throw new AppError('Movimento ja se encontra anulado.', 409);
 
     const itens = await consumosRepo.itensDaConsumo(consumoId, conn);
@@ -258,11 +335,33 @@ async function listar(filtros) {
   return consumosRepo.listar(filtros);
 }
 
+/**
+ * Movimentos de UM utilizador (ecra "os meus movimentos" do GIM).
+ *
+ * O `utilizadorId` tem de vir da SESSAO do servidor. Esta funcao recusa
+ * qualquer valor que nao seja um id inteiro positivo, mas a garantia real esta
+ * em quem chama: nunca aceitar este valor da query string nem do body, senao
+ * bastava ?utilizador_id=1 para um funcionario ver o turno de outra pessoa.
+ *
+ * Nao devolve preco de custo nem margem: sao informacao de gestao e nao saem
+ * do backoffice (ver consumos.repo.listarDoUtilizador).
+ */
+async function listarDoUtilizador(utilizadorId, { de, ate, limite = 200 } = {}) {
+  const id = Number(utilizadorId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new AppError('Utilizador invalido.', 400);
+  }
+  return consumosRepo.listarDoUtilizador(id, { de, ate, limite });
+}
+
 module.exports = {
   criarConsumo,
   anularConsumo,
+  podeOperadorAnular,
+  MSG_ANULAR_RECUSADO,
   detalhe,
   listar,
+  listarDoUtilizador,
   calcularPagamento,
   agregarItens,
   calcularSubtotal,

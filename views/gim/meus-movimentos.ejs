@@ -1,0 +1,145 @@
+<%#
+  OS MEUS MOVIMENTOS — consulta que o operador faz do seu proprio turno.
+
+  O filtro por utilizador e imposto no SERVIDOR a partir da sessao
+  (ver src/controllers/meusMovimentos.controller.js) -- mexer no URL nao mostra
+  os movimentos de mais ninguem.
+
+  ANULAR: o operador pode anular um movimento SEU enquanto a caixa em que foi
+  registado continuar aberta. O botao so aparece quando `pode_anular` e
+  verdadeiro, mas isso e SO usabilidade: quem autoriza e o servidor, dentro da
+  transacao (consumos.service.garantirOperadorPodeAnular).
+
+  NAO mostra preco de custo nem margem: isso e informacao de gestao e nao sai
+  do backoffice.
+
+  Estilos reaproveitados do GIM (/css/gim.css): alvos de toque >= 64px e lista
+  em cartoes em vez de tabela larga, para nao obrigar a scroll horizontal no
+  tablet do balcao. Zero JS inline (confirmacao por data-confirmar).
+%>
+<div class="gim gim-mov">
+
+  <header class="gim-topo">
+    <div class="gim-topo-info">
+      <span class="gim-topo-marca"><i class="bi bi-cup-hot" aria-hidden="true"></i> <%= appNome %></span>
+      <% if (utilizador) { %>
+        <span class="gim-topo-operador"><i class="bi bi-person" aria-hidden="true"></i> <%= utilizador.nome %></span>
+      <% } %>
+    </div>
+
+    <div class="gim-topo-acoes">
+      <a class="gim-mini-btn" href="/gim" aria-label="Voltar ao registo de movimentos">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i><span>Voltar ao registo</span>
+      </a>
+      <%# Confirmacao pelo painel escuro do GIM (/js/confirmar.js): zero JS inline. %>
+      <form method="post" action="/logout" class="d-inline"
+            data-confirmar="Terminar sessao?"
+            data-confirmar-titulo="Terminar sessao"
+            data-confirmar-detalhe="O ecra volta ao inicio de sessao. Sera preciso entrar outra vez para registar movimentos."
+            data-confirmar-ok="Terminar sessao"
+            data-confirmar-cancelar="Continuar aqui"
+            data-confirmar-perigo="1">
+        <button class="gim-mini-btn gim-mini-btn-sair" type="submit" aria-label="Terminar sessao">
+          <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span>Sair</span>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <div class="gim-mov-corpo">
+    <h1 class="gim-mov-titulo">
+      <i class="bi bi-clipboard-check" aria-hidden="true"></i> Os meus movimentos
+    </h1>
+    <p class="gim-mov-ajuda">
+      Apenas os movimentos que <strong>voce</strong> registou. Por omissao, os de hoje.
+    </p>
+
+    <%# Mesmo padrao de filtros de views/admin/consumos/index.ejs: GET simples,
+        sem JS. So o periodo -- quem e o dono nao se escolhe aqui. %>
+    <form class="gim-mov-filtros" method="get" action="/gim/meus-movimentos">
+      <div class="gim-mov-campo">
+        <label class="gim-mov-label" for="movDe">De</label>
+        <input type="date" class="gim-mov-input" id="movDe" name="de" value="<%= filtros.de %>">
+      </div>
+      <div class="gim-mov-campo">
+        <label class="gim-mov-label" for="movAte">Ate</label>
+        <input type="date" class="gim-mov-input" id="movAte" name="ate" value="<%= filtros.ate %>">
+      </div>
+      <button class="gim-mov-btn" type="submit">
+        <i class="bi bi-funnel" aria-hidden="true"></i> Ver periodo
+      </button>
+      <a class="gim-mov-btn gim-mov-btn-fraco" href="/gim/meus-movimentos">
+        <i class="bi bi-calendar-day" aria-hidden="true"></i> Hoje
+      </a>
+    </form>
+
+    <div class="gim-mov-resumo">
+      <div class="gim-mov-resumo-bloco">
+        <span class="gim-mov-resumo-etiqueta">Movimentos</span>
+        <strong class="gim-mov-resumo-valor"><%= nConcluidos %></strong>
+      </div>
+      <div class="gim-mov-resumo-bloco">
+        <span class="gim-mov-resumo-etiqueta">Total no periodo</span>
+        <strong class="gim-mov-resumo-valor"><%= eur(totalPeriodo) %></strong>
+      </div>
+    </div>
+
+    <ul class="gim-mov-lista">
+      <% consumos.forEach(function (c) { %>
+        <li class="gim-mov-item<%= c.estado === 'anulada' ? ' is-anulado' : '' %>">
+          <div class="gim-mov-item-linha">
+            <span class="gim-mov-numero">#<%= c.numero %></span>
+            <span class="gim-mov-estado<%= c.estado === 'anulada' ? ' is-anulado' : '' %>">
+              <%= c.estado === 'anulada' ? 'Anulado' : 'Concluido' %>
+            </span>
+          </div>
+          <div class="gim-mov-item-linha">
+            <span class="gim-mov-data"><i class="bi bi-clock" aria-hidden="true"></i> <%= dataHoraPT(c.criado_em) %></span>
+            <span class="gim-mov-itens"><%= Number(c.n_itens) %> <%= Number(c.n_itens) === 1 ? 'artigo' : 'artigos' %></span>
+          </div>
+          <div class="gim-mov-item-linha">
+            <span class="gim-mov-total-etiqueta">Total</span>
+            <span class="gim-mov-total"><%= eur(c.total) %></span>
+          </div>
+
+          <%# Anular so aparece quando a accao e mesmo possivel: movimento
+              proprio, ainda concluido e com a caixa aberta. Confirmacao pelo
+              painel do GIM (/js/confirmar.js): zero JS inline. %>
+          <% if (c.pode_anular) { %>
+            <form method="post" action="/gim/meus-movimentos/<%= c.id %>/anular"
+                  class="gim-mov-item-accao"
+                  data-confirmar="Anular o movimento #<%= c.numero %>?"
+                  data-confirmar-titulo="Anular movimento #<%= c.numero %>"
+                  data-confirmar-detalhe="O stock dos artigos deste movimento vai ser REPOSTO. Esta accao fica registada e nao pode ser desfeita."
+                  data-confirmar-ok="Anular e repor stock"
+                  data-confirmar-cancelar="Manter"
+                  data-confirmar-perigo="1">
+              <input type="hidden" name="de" value="<%= filtros.de %>">
+              <input type="hidden" name="ate" value="<%= filtros.ate %>">
+              <button class="gim-mov-anular" type="submit">
+                <i class="bi bi-x-octagon" aria-hidden="true"></i>
+                <span>Anular movimento</span>
+              </button>
+            </form>
+          <% } else if (c.estado === 'concluida') { %>
+            <p class="gim-mov-bloqueado">
+              <i class="bi bi-lock" aria-hidden="true"></i>
+              Caixa ja fechada: so o responsavel pode anular este movimento.
+            </p>
+          <% } %>
+        </li>
+      <% }); %>
+      <% if (!consumos.length) { %>
+        <li class="gim-mov-vazio" data-sem-dados="1">
+          <i class="bi bi-inbox" aria-hidden="true"></i>
+          Sem movimentos seus no periodo seleccionado.
+        </li>
+      <% } %>
+    </ul>
+
+    <p class="gim-mov-nota">
+      Registo interno — sem valor fiscal. Pode anular um movimento seu enquanto a caixa
+      estiver aberta; a anulacao repoe o stock. Depois do fecho, so o responsavel o pode fazer.
+    </p>
+  </div>
+</div>

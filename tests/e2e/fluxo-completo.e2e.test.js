@@ -1087,6 +1087,486 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.ok(!destino.text.includes('/css/pos.css'));
       assert.ok(!destino.text.includes('/js/pos.js'));
     });
+
+    // --- 17. Gestao de utilizadores no backoffice ---------------------------
+    // Passos NOVOS, no fim de proposito: criam registos e nao podem invalidar
+    // os totais dos passos anteriores, que estao verificados a mao.
+    const RITA = {
+      nome: 'Rita Balcao',
+      username: 'rita.balcao',
+      password: 'segredo-forte-1',
+      pin: '5150',
+      role: 'funcionario'
+    };
+    let ritaId = null;
+
+    await t.test('17a. Admin cria um utilizador: hashes bcrypt na BD, nada em claro', async () => {
+      const res = await agente
+        .post('/admin/utilizadores')
+        .type('form')
+        .send({ ...RITA, ativo: '1' });
+
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/admin/utilizadores');
+
+      const criado = await uma('SELECT * FROM utilizadores WHERE username = ?', [RITA.username]);
+      assert.ok(criado, 'o utilizador devia ter sido gravado');
+      ritaId = criado.id;
+
+      assert.equal(criado.nome, RITA.nome);
+      assert.equal(criado.role, 'funcionario');
+      assert.equal(Number(criado.ativo), 1);
+
+      // bcrypt com SALT_ROUNDS = 12 (ver auth.service.hashPassword).
+      assert.match(criado.password_hash, /^\$2[aby]\$12\$/);
+      assert.match(criado.pin_hash, /^\$2[aby]\$12\$/);
+      // E nada, em coluna nenhuma, guarda a credencial em claro.
+      assert.notEqual(criado.password_hash, RITA.password);
+      assert.notEqual(criado.pin_hash, RITA.pin);
+      assert.ok(criado.password_hash.indexOf(RITA.password) === -1);
+      assert.ok(criado.pin_hash.indexOf(RITA.pin) === -1);
+
+      const emClaro = await uma(
+        'SELECT COUNT(*) AS n FROM utilizadores WHERE password_hash = ? OR pin_hash = ?',
+        [RITA.password, RITA.pin]
+      );
+      assert.equal(Number(emClaro.n), 0, 'nenhuma linha pode ter password/PIN em claro');
+
+      // Aparece na listagem, sem credenciais nem hashes no HTML.
+      const lista = await agente.get('/admin/utilizadores');
+      assert.equal(lista.status, 200);
+      assert.ok(lista.text.indexOf(RITA.nome) !== -1);
+      assert.ok(lista.text.indexOf(RITA.password) === -1);
+      assert.ok(lista.text.indexOf(RITA.pin) === -1);
+      assert.ok(lista.text.indexOf('$2a$') === -1);
+    });
+
+    await t.test('17b. O utilizador novo entra por password e por PIN, como ELE proprio', async () => {
+      // Login por password.
+      const porPassword = request.agent(app);
+      const login = await porPassword
+        .post('/login')
+        .type('form')
+        .send({ username: RITA.username, password: RITA.password });
+
+      assert.equal(login.status, 302);
+      assert.equal(login.headers.location, '/gim', 'e funcionario: vai para o GIM');
+
+      // Login por PIN, num agente novo. A prova de identidade nao e o ecra: e
+      // o dono do movimento que fica gravado na base de dados.
+      const porPin = request.agent(app);
+      const pin = await porPin.post('/gim/pin').type('form').send({ pin: RITA.pin });
+      assert.equal(pin.status, 302);
+      assert.equal(pin.headers.location, '/gim');
+
+      const cha = await artigoPorNome('Cha'); // 0.90
+      const movimento = await porPin.post('/api/consumos').send({
+        itens: [{ artigo_id: cha.id, quantidade: 1 }]
+      });
+      assert.equal(movimento.status, 201);
+
+      const gravado = await uma('SELECT * FROM consumos WHERE id = ?', [movimento.body.consumo.id]);
+      assert.equal(
+        gravado.utilizador_id,
+        ritaId,
+        'o PIN tem de autenticar a PESSOA CERTA, senao o controlo interno nao vale nada'
+      );
+    });
+
+    await t.test('17c. Um segundo utilizador com o PIN repetido e rejeitado', async () => {
+      const antes = await uma('SELECT COUNT(*) AS n FROM utilizadores');
+
+      const res = await agente
+        .post('/admin/utilizadores')
+        .type('form')
+        .send({
+          nome: 'Clone do PIN',
+          username: 'clone.pin',
+          password: 'outra-password-99',
+          pin: RITA.pin, // exactamente o mesmo PIN
+          role: 'funcionario',
+          ativo: '1'
+        });
+
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/admin/utilizadores/novo', 'volta ao formulario');
+
+      const depois = await uma('SELECT COUNT(*) AS n FROM utilizadores');
+      assert.equal(Number(depois.n), Number(antes.n), 'nao pode ter sido criado nada');
+      assert.equal(await uma('SELECT id FROM utilizadores WHERE username = ?', ['clone.pin']), null);
+
+      // A mensagem chega ao admin, e e clara.
+      const formulario = await agente.get('/admin/utilizadores/novo');
+      assert.ok(
+        formulario.text.indexOf('Ja existe um utilizador activo com esse PIN.') !== -1,
+        'o admin tem de perceber porque foi recusado'
+      );
+    });
+
+    await t.test('17d. O admin nao se pode desactivar nem despromover a si proprio', async () => {
+      const eu = await uma('SELECT * FROM utilizadores WHERE username = ?', [ADMIN.username]);
+
+      // Auto-desactivacao pela rota de desactivar.
+      const desactivar = await agente
+        .post(`/admin/utilizadores/${eu.id}/desactivar`)
+        .type('form')
+        .send({});
+      assert.equal(desactivar.status, 302);
+
+      const depoisDesactivar = await uma('SELECT ativo, role FROM utilizadores WHERE id = ?', [eu.id]);
+      assert.equal(Number(depoisDesactivar.ativo), 1, 'o admin tem de continuar activo');
+
+      const pagina = await agente.get('/admin/utilizadores');
+      assert.ok(pagina.text.indexOf('Nao pode desactivar a sua propria conta.') !== -1);
+
+      // Auto-despromocao pelo formulario de edicao.
+      const despromover = await agente
+        .post(`/admin/utilizadores/${eu.id}`)
+        .type('form')
+        .send({
+          nome: eu.nome,
+          username: eu.username,
+          password: '',
+          pin: '',
+          role: 'funcionario',
+          ativo: '1'
+        });
+      assert.equal(despromover.status, 302);
+
+      const depoisDespromover = await uma('SELECT ativo, role FROM utilizadores WHERE id = ?', [eu.id]);
+      assert.equal(depoisDespromover.role, 'admin', 'o admin tem de continuar admin');
+      assert.equal(Number(depoisDespromover.ativo), 1);
+
+      // E o sistema continua com pelo menos um admin activo.
+      const admins = await uma(
+        "SELECT COUNT(*) AS n FROM utilizadores WHERE role = 'admin' AND ativo = 1"
+      );
+      assert.ok(Number(admins.n) >= 1, 'nunca pode ficar o sistema sem administrador activo');
+
+      // As credenciais do admin continuam a funcionar (nada foi corrompido).
+      const reentrada = request.agent(app);
+      const login = await reentrada
+        .post('/login')
+        .type('form')
+        .send({ username: ADMIN.username, password: ADMIN.password });
+      assert.equal(login.status, 302);
+      assert.equal(login.headers.location, '/admin');
+    });
+
+    await t.test('17e. Editar sem password/PIN nao apaga os hashes existentes', async () => {
+      const antes = await uma('SELECT * FROM utilizadores WHERE id = ?', [ritaId]);
+
+      const res = await agente
+        .post(`/admin/utilizadores/${ritaId}`)
+        .type('form')
+        .send({
+          nome: 'Rita Balcao (turno da tarde)',
+          username: RITA.username,
+          password: '',
+          pin: '',
+          role: 'funcionario',
+          ativo: '1'
+        });
+      assert.equal(res.status, 302);
+      assert.equal(res.headers.location, '/admin/utilizadores');
+
+      const depois = await uma('SELECT * FROM utilizadores WHERE id = ?', [ritaId]);
+      assert.equal(depois.nome, 'Rita Balcao (turno da tarde)');
+      assert.equal(depois.password_hash, antes.password_hash, 'o hash da password nao pode mudar');
+      assert.equal(depois.pin_hash, antes.pin_hash, 'o hash do PIN nao pode mudar');
+      assert.ok(depois.pin_hash, 'o PIN nao pode ter sido apagado');
+
+      // E as credenciais antigas continuam mesmo a funcionar.
+      const porPin = request.agent(app);
+      const pin = await porPin.post('/gim/pin').type('form').send({ pin: RITA.pin });
+      assert.equal(pin.status, 302);
+      assert.equal(pin.headers.location, '/gim');
+    });
+
+    // --- 18. "Os meus movimentos": filtro imposto no servidor ---------------
+    await t.test('18. O funcionario so ve os SEUS movimentos e nao entra no backoffice', async () => {
+      const balcao = request.agent(app);
+      const login = await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: RITA.username, password: RITA.password });
+      assert.equal(login.status, 302);
+
+      const funcionarioBd = await uma('SELECT id FROM utilizadores WHERE username = ?', [
+        FUNCIONARIO.username
+      ]);
+
+      // Um movimento dela, agora.
+      const gelado = await artigoPorNome('Gelado'); // 1.50
+      const meu = await balcao.post('/api/consumos').send({
+        itens: [{ artigo_id: gelado.id, quantidade: 2 }]
+      });
+      assert.equal(meu.status, 201);
+      assert.equal(meu.body.consumo.total, 3);
+      const meuId = meu.body.consumo.id;
+      const meuNumero = meu.body.consumo.numero;
+
+      // Um movimento de OUTRA pessoa, hoje tambem.
+      const outroBalcao = request.agent(app);
+      await outroBalcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+      const agua = await artigoPorNome('Agua 0.5L');
+      const doOutro = await outroBalcao.post('/api/consumos').send({
+        itens: [{ artigo_id: agua.id, quantidade: 1 }]
+      });
+      assert.equal(doOutro.status, 201);
+      const numeroDoOutro = doOutro.body.consumo.numero;
+
+      // O ecra mostra o dela e NAO mostra o do colega.
+      const meus = await balcao.get('/gim/meus-movimentos');
+      assert.equal(meus.status, 200);
+      assert.ok(meus.text.indexOf(`#${meuNumero}`) !== -1, 'devia mostrar o movimento dela');
+      assert.ok(
+        meus.text.indexOf(`#${numeroDoOutro}`) === -1,
+        'NAO pode mostrar o movimento de outra pessoa'
+      );
+
+      // Mexer no URL nao muda nada: o dono vem da sessao.
+      for (const querystring of ['?utilizador_id=1', `?utilizador_id=${funcionarioBd.id}`, '?id=1']) {
+        const forcado = await balcao.get(`/gim/meus-movimentos${querystring}`);
+        assert.equal(forcado.status, 200);
+        assert.ok(
+          forcado.text.indexOf(`#${numeroDoOutro}`) === -1,
+          `${querystring} nao pode revelar movimentos de outra pessoa`
+        );
+        assert.ok(forcado.text.indexOf(`#${meuNumero}`) !== -1);
+      }
+
+      // Nao mostra custo nem margem (informacao de gestao).
+      for (const proibido of ['custo', 'Custo', 'margem', 'Margem']) {
+        assert.ok(meus.text.indexOf(proibido) === -1, `o ecra nao pode mostrar "${proibido}"`);
+      }
+
+      // O BACKOFFICE continua vedado: o funcionario anula pelo GIM (passo 20),
+      // nunca por /admin/*.
+      const anular = await balcao.post(`/admin/consumos/${meuId}/anular`).type('form').send({});
+      assert.equal(anular.status, 403, 'o funcionario nao entra no backoffice');
+
+      const aindaConcluido = await uma('SELECT estado FROM consumos WHERE id = ?', [meuId]);
+      assert.equal(aindaConcluido.estado, 'concluida', 'o movimento nao podia ter sido anulado');
+
+      // E a gestao de utilizadores tambem esta vedada.
+      const VEDADAS = [
+        '/admin/utilizadores',
+        '/admin/utilizadores/novo',
+        `/admin/utilizadores/${ritaId}/editar`
+      ];
+      for (const rota of VEDADAS) {
+        const bloqueado = await balcao.get(rota);
+        assert.equal(bloqueado.status, 403, `${rota} devia dar 403 ao funcionario`);
+      }
+      const criarProibido = await balcao
+        .post('/admin/utilizadores')
+        .type('form')
+        .send({
+          nome: 'Intruso',
+          username: 'intruso',
+          password: 'password-1234',
+          pin: '1111',
+          role: 'admin'
+        });
+      assert.equal(criarProibido.status, 403);
+      assert.equal(await uma('SELECT id FROM utilizadores WHERE username = ?', ['intruso']), null);
+
+      // Sem sessao nao ha ecra nenhum.
+      const anonimo = await request(app).get('/gim/meus-movimentos');
+      assert.equal(anonimo.status, 302);
+      assert.match(anonimo.headers.location, /^\/login\?next=/);
+    });
+
+    // --- 19. Desactivar um utilizador (soft-delete) --------------------------
+    await t.test('19. Desactivar mantem o historico e fecha os dois logins', async () => {
+      const movimentosAntes = await uma('SELECT COUNT(*) AS n FROM consumos WHERE utilizador_id = ?', [
+        ritaId
+      ]);
+      assert.ok(Number(movimentosAntes.n) > 0, 'a Rita ja registou movimentos');
+
+      const res = await agente.post(`/admin/utilizadores/${ritaId}/desactivar`).type('form').send({});
+      assert.equal(res.status, 302);
+
+      // Soft-delete: a linha continua la, so muda `ativo`.
+      const depois = await uma('SELECT * FROM utilizadores WHERE id = ?', [ritaId]);
+      assert.ok(depois, 'nunca pode haver DELETE fisico: o historico aponta para ca');
+      assert.equal(Number(depois.ativo), 0);
+
+      // O historico ficou intacto.
+      const movimentosDepois = await uma(
+        'SELECT COUNT(*) AS n FROM consumos WHERE utilizador_id = ?',
+        [ritaId]
+      );
+      assert.equal(Number(movimentosDepois.n), Number(movimentosAntes.n));
+
+      // E ja nao entra: nem por password, nem por PIN.
+      const porPassword = request.agent(app);
+      const login = await porPassword
+        .post('/login')
+        .type('form')
+        .send({ username: RITA.username, password: RITA.password });
+      assert.equal(login.status, 401);
+
+      const porPin = request.agent(app);
+      const pin = await porPin.post('/gim/pin').type('form').send({ pin: RITA.pin });
+      assert.equal(pin.status, 302);
+      assert.equal(pin.headers.location, '/login', 'PIN de utilizador desactivado nao autentica');
+      const bloqueado = await porPin.get('/api/gim/artigos');
+      assert.equal(bloqueado.status, 401);
+    });
+
+    // --- 20. Anular o proprio movimento com a caixa aberta -------------------
+    // Passo NOVO, no fim de proposito: mexe em stock e em sessoes de caixa, e
+    // os totais dos passos anteriores estao conferidos a mao.
+    //
+    // Usa o funcionario do SEED (a Rita foi desactivada no passo 19).
+    await t.test('20. O operador anula movimentos seus so enquanto a caixa esta aberta', async () => {
+      const balcao = request.agent(app);
+      const login = await balcao
+        .post('/login')
+        .type('form')
+        .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
+      assert.equal(login.status, 302);
+
+      // Garantir que NAO ha caixa aberta, para comecar pelo caso do orfao.
+      const abertaInicial = await uma("SELECT id FROM sessoes_caixa WHERE estado = 'aberta'");
+      if (abertaInicial) {
+        const fecho = await agente.post('/caixa/fechar').type('form').send({ total_contado: '0' });
+        assert.equal(fecho.status, 302);
+      }
+
+      // (a) SEM caixa: o movimento fica orfao e o operador NAO o pode anular.
+      const cafe = await artigoPorNome('Cafe');
+      const orfao = await balcao.post('/api/consumos').send({
+        itens: [{ artigo_id: cafe.id, quantidade: 1 }]
+      });
+      assert.equal(orfao.status, 201);
+      const orfaoId = orfao.body.consumo.id;
+      assert.equal(
+        (await uma('SELECT sessao_caixa_id FROM consumos WHERE id = ?', [orfaoId])).sessao_caixa_id,
+        null,
+        'sem caixa aberta o consumo fica orfao'
+      );
+
+      const recusaOrfao = await balcao
+        .post(`/gim/meus-movimentos/${orfaoId}/anular`)
+        .type('form')
+        .send({});
+      assert.equal(recusaOrfao.status, 403, 'consumo orfao nao e anulavel pelo operador');
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [orfaoId])).estado,
+        'concluida'
+      );
+
+      // (b) COM a caixa aberta: anula e o stock volta mesmo.
+      const abertura = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '0' });
+      assert.equal(abertura.status, 302);
+
+      const antes = await artigoPorNome('Cafe');
+      const meu = await balcao.post('/api/consumos').send({
+        itens: [{ artigo_id: cafe.id, quantidade: 3 }]
+      });
+      assert.equal(meu.status, 201);
+      const meuId = meu.body.consumo.id;
+
+      const depoisDoConsumo = await artigoPorNome('Cafe');
+      assert.equal(Number(depoisDoConsumo.quantidade), Number(antes.quantidade) - 3);
+
+      // O botao aparece no ecra (a accao e possivel).
+      const ecra = await balcao.get('/gim/meus-movimentos');
+      assert.equal(ecra.status, 200);
+      assert.ok(
+        ecra.text.indexOf(`/gim/meus-movimentos/${meuId}/anular`) !== -1,
+        'devia haver botao de anular para um movimento seu com a caixa aberta'
+      );
+
+      const anulou = await balcao.post(`/gim/meus-movimentos/${meuId}/anular`).type('form').send({});
+      assert.equal(anulou.status, 302);
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [meuId])).estado,
+        'anulada'
+      );
+
+      const reposto = await artigoPorNome('Cafe');
+      assert.equal(Number(reposto.quantidade), Number(antes.quantidade), 'o stock tem de voltar');
+
+      // Nao anula duas vezes (nem repoe stock outra vez).
+      const segunda = await balcao.post(`/gim/meus-movimentos/${meuId}/anular`).type('form').send({});
+      assert.equal(segunda.status, 403);
+      assert.equal(
+        Number((await artigoPorNome('Cafe')).quantidade),
+        Number(antes.quantidade),
+        'o stock nao pode ser reposto duas vezes'
+      );
+
+      // (c) Movimento de OUTRA pessoa: 403, mesmo com a caixa aberta.
+      const doAdmin = await agente.post('/api/consumos').send({
+        itens: [{ artigo_id: cafe.id, quantidade: 1 }]
+      });
+      assert.equal(doAdmin.status, 201);
+      const idDoAdmin = doAdmin.body.consumo.id;
+
+      const alheio = await balcao
+        .post(`/gim/meus-movimentos/${idDoAdmin}/anular`)
+        .type('form')
+        .send({ utilizador_id: '1', id: String(meuId) });
+      assert.equal(alheio.status, 403, 'nao pode anular movimentos de outra pessoa');
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [idDoAdmin])).estado,
+        'concluida'
+      );
+
+      // (d) Depois do FECHO, o mesmo operador ja nao lhe pode tocar.
+      const paraDepois = await balcao.post('/api/consumos').send({
+        itens: [{ artigo_id: cafe.id, quantidade: 1 }]
+      });
+      assert.equal(paraDepois.status, 201);
+      const idParaDepois = paraDepois.body.consumo.id;
+
+      const fecho = await agente.post('/caixa/fechar').type('form').send({ total_contado: '0' });
+      assert.equal(fecho.status, 302);
+
+      const tarde = await balcao
+        .post(`/gim/meus-movimentos/${idParaDepois}/anular`)
+        .type('form')
+        .send({});
+      assert.equal(tarde.status, 403, 'com a caixa fechada o registo fica selado');
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [idParaDepois])).estado,
+        'concluida'
+      );
+
+      // O ecra ja nao mostra o botao, e explica porque.
+      const ecraDepois = await balcao.get('/gim/meus-movimentos');
+      assert.ok(ecraDepois.text.indexOf(`/gim/meus-movimentos/${idParaDepois}/anular`) === -1);
+      assert.match(ecraDepois.text, /Caixa ja fechada/);
+
+      // (e) O ADMIN continua sem restricoes: anula o de caixa ja fechada.
+      const peloAdmin = await agente
+        .post(`/admin/consumos/${idParaDepois}/anular`)
+        .type('form')
+        .send({});
+      assert.equal(peloAdmin.status, 302);
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [idParaDepois])).estado,
+        'anulada'
+      );
+
+      // E tambem o orfao, que o operador nunca poderia tocar.
+      const orfaoPeloAdmin = await agente
+        .post(`/admin/consumos/${orfaoId}/anular`)
+        .type('form')
+        .send({});
+      assert.equal(orfaoPeloAdmin.status, 302);
+      assert.equal(
+        (await uma('SELECT estado FROM consumos WHERE id = ?', [orfaoId])).estado,
+        'anulada'
+      );
+    });
   } finally {
     // Limpeza garantida, mesmo com falhas acima.
     for (const ficheiro of ficheirosUpload) {

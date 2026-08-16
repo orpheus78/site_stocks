@@ -1,14 +1,34 @@
 'use strict';
 
 const express = require('express');
-const { body } = require('express-validator');
+const { body, param } = require('express-validator');
 const { validate } = require('../middleware/validate');
 const { requireGim } = require('../middleware/auth');
 const ctrl = require('../controllers/gim.controller');
+const meusMovimentosCtrl = require('../controllers/meusMovimentos.controller');
 
 const router = express.Router();
 
 router.get('/gim', requireGim, ctrl.ecra);
+
+// Consulta que o operador faz do SEU proprio turno.
+router.get('/gim/meus-movimentos', requireGim, meusMovimentosCtrl.listar);
+
+// Anulacao pelo PROPRIO operador, a partir do ecra acima.
+//
+// Rota deliberadamente SEPARADA de POST /admin/consumos/:id/anular: o
+// backoffice continua exclusivo do admin (requireAdmin intacto) e nao foi
+// enfraquecido. Aqui entra qualquer perfil do GIM, mas quem nao e admin so
+// passa se o servico confirmar, contra a BASE DE DADOS e dentro da transacao,
+// que o movimento e dele, esta concluido e a caixa dele ainda esta aberta.
+router.post(
+  '/gim/meus-movimentos/:id/anular',
+  requireGim,
+  [param('id').isInt({ min: 1 }).withMessage('Movimento invalido.')],
+  validate,
+  meusMovimentosCtrl.anular
+);
+
 router.get('/api/gim/artigos', requireGim, ctrl.catalogo);
 
 router.post(

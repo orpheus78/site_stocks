@@ -20,6 +20,8 @@
               <li><a class="dropdown-item" href="/admin/stocks">Stocks</a></li>
               <li><a class="dropdown-item" href="/admin/movimentos">Movimentos de stock</a></li>
               <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item<%= currentPath.startsWith('/admin/utilizadores') ? ' active' : '' %>" href="/admin/utilizadores">Utilizadores</a></li>
+              <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item<%= currentPath.startsWith('/admin/consumos') ? ' active' : '' %>" href="/admin/consumos">Movimentos Internos</a></li>
               <li><a class="dropdown-item" href="/admin/relatorios">Relatorios</a></li>
             </ul>

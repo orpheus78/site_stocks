@@ -16,7 +16,7 @@ async function estadoAtual() {
 
   const [movimentos, totais] = await Promise.all([
     caixaRepo.movimentosDaSessao(sessao.id),
-    caixaRepo.totaisVendas(sessao.id)
+    caixaRepo.totaisConsumos(sessao.id)
   ]);
 
   return { sessao, movimentos, totais, resumo: calcularResumo(sessao, movimentos, totais), semSessao };
@@ -45,18 +45,18 @@ function calcularResumo(sessao, movimentos, totais) {
   }
 
   const fundo = round2(sessao.fundo_inicial);
-  const vendasDinheiro = round2(totais.dinheiro);
+  const consumosDinheiro = round2(totais.dinheiro);
   // `interno` pode nao vir de chamadores antigos: trata-se como 0, nunca NaN.
   const internos = round2(totais.interno || 0);
-  const esperado = round2(fundo + vendasDinheiro + internos + entradas - saidas - sangrias);
+  const esperado = round2(fundo + consumosDinheiro + internos + entradas - saidas - sangrias);
 
   return {
     fundo_inicial: fundo,
-    vendas_dinheiro: vendasDinheiro,
-    vendas_multibanco: round2(totais.multibanco),
-    vendas_total: round2(totais.total),
+    consumos_dinheiro: consumosDinheiro,
+    consumos_multibanco: round2(totais.multibanco),
+    consumos_total: round2(totais.total),
     movimentos_internos: internos,
-    n_vendas: totais.n_vendas,
+    n_consumos: totais.n_consumos,
     entradas,
     saidas,
     sangrias,
@@ -116,7 +116,7 @@ async function detalheSessao(id) {
   if (!sessao) return null;
   const [movimentos, totais] = await Promise.all([
     caixaRepo.movimentosDaSessao(id),
-    caixaRepo.totaisVendas(id)
+    caixaRepo.totaisConsumos(id)
   ]);
   return { sessao, movimentos, totais, resumo: calcularResumo(sessao, movimentos, totais) };
 }

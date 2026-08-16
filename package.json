@@ -2,7 +2,7 @@
   "name": "bar-campo-gestao",
   "version": "1.0.0",
   "private": true,
-  "description": "Aplicacao de gestao para bar de campo de futebol (POS + backoffice)",
+  "description": "Aplicacao de gestao para bar de campo de futebol (GIM + backoffice)",
   "main": "src/server.js",
   "engines": {
     "node": ">=18"

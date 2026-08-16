@@ -7,15 +7,15 @@ const artigosRepo = require('../repositories/artigos.repo');
 const { AppError } = require('./AppError');
 const { round2 } = require('../utils');
 
-const TIPOS = ['entrada', 'saida', 'ajuste', 'venda'];
+const TIPOS = ['entrada', 'saida', 'ajuste', 'consumo'];
 
 /**
  * Calculo puro da nova quantidade de stock apos um movimento.
  * Extraido para ser testavel isoladamente, sem BD.
  *
- * @param {'entrada'|'saida'|'ajuste'|'venda'} tipo
+ * @param {'entrada'|'saida'|'ajuste'|'consumo'} tipo
  * @param {number} atual  quantidade atual em stock
- * @param {number} quantidade  entrada: soma; saida/venda: subtrai; ajuste: define o valor absoluto
+ * @param {number} quantidade  entrada: soma; saida/consumo: subtrai; ajuste: define o valor absoluto
  * @returns {number} nova quantidade (arredondada a 2 casas)
  */
 function calcularNovaQuantidade(tipo, atual, quantidade) {
@@ -23,7 +23,7 @@ function calcularNovaQuantidade(tipo, atual, quantidade) {
   const base = round2(atual);
   let nova;
   if (tipo === 'entrada') nova = base + qtd;
-  else if (tipo === 'saida' || tipo === 'venda') nova = base - qtd;
+  else if (tipo === 'saida' || tipo === 'consumo') nova = base - qtd;
   else nova = qtd; // ajuste: valor absoluto de inventario
   return round2(nova);
 }
@@ -39,7 +39,7 @@ function isStockBaixo(quantidade, stockMinimo) {
 }
 
 /**
- * Estado de stock de um artigo, normalizado para ser exposto ao POS.
+ * Estado de stock de um artigo, normalizado para ser exposto ao GIM.
  *
  * Esta e a UNICA derivacao de "stock baixo" usada na aplicacao (a mesma regra
  * `quantidade <= stock_minimo` do backoffice e das queries de alertas), para
@@ -70,13 +70,13 @@ function estadoStockArtigo(quantidade, stockMinimo) {
  * Aplica um movimento de stock dentro de uma ligacao/transacao existente.
  *
  * DECISAO DE NEGOCIO: o stock PODE ficar negativo.
- * Num bar de campo de futebol a venda nunca pode ser bloqueada por
+ * Num bar de campo de futebol o registo de consumo nunca pode ser bloqueado por
  * divergencias de inventario (ex.: entrada de mercadoria ainda por registar).
  * O movimento e sempre registado e a quantidade resultante negativa fica
  * visivel nos alertas de stock para correcao posterior.
  *
- * @param {'entrada'|'saida'|'ajuste'|'venda'} tipo
- * @param {number} quantidade  entrada: soma; saida/venda: subtrai; ajuste: define o valor absoluto
+ * @param {'entrada'|'saida'|'ajuste'|'consumo'} tipo
+ * @param {number} quantidade  entrada: soma; saida/consumo: subtrai; ajuste: define o valor absoluto
  */
 async function aplicarMovimento(conn, { artigoId, tipo, quantidade, motivo, utilizadorId }) {
   if (!TIPOS.includes(tipo)) throw new AppError(`Tipo de movimento invalido: ${tipo}`, 400);
@@ -116,7 +116,7 @@ async function aplicarMovimento(conn, { artigoId, tipo, quantidade, motivo, util
     anterior: atual,
     atual: novaQuantidade,
     negativo: isStockNegativo(novaQuantidade),
-    // Contexto para quem precisa de avisar (POS): minimo, unidade e se ficou
+    // Contexto para quem precisa de avisar (GIM): minimo, unidade e se ficou
     // abaixo do minimo. Nunca bloqueia nada -- e apenas informacao.
     stockMinimo,
     unidade: stock.unidade || 'un',

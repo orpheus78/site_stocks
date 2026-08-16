@@ -3,7 +3,7 @@
 /**
  * Suporte a layout para EJS sem dependencias extra:
  * a view e renderizada para string e injetada em `views/layouts/main.ejs`.
- * Para saltar o layout (ex.: talao de impressao) passar `layout: false`.
+ * Para saltar o layout (ex.: um fragmento parcial) passar `layout: false`.
  */
 function layout(req, res, next) {
   const render = res.render.bind(res);

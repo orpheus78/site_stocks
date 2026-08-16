@@ -6,7 +6,7 @@ const { areaInicial } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Encaminha cada perfil para a sua area: admin -> backoffice, funcionario -> POS.
+// Encaminha cada perfil para a sua area: admin -> backoffice, funcionario -> GIM.
 router.get('/', (req, res) => {
   const user = req.session && req.session.utilizador;
   res.redirect(user ? areaInicial(user) : '/login');
@@ -28,7 +28,7 @@ router.get('/ready', async (req, res) => {
 });
 
 router.use(require('./auth.routes'));
-router.use(require('./pos.routes'));
+router.use(require('./gim.routes'));
 router.use(require('./caixa.routes'));
 router.use('/admin', require('./admin.routes'));
 

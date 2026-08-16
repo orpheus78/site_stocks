@@ -15,7 +15,7 @@ function destinoSeguro(valor, fallback) {
  * O `next` so e respeitado para admin. Um funcionario que tenha batido em
  * /admin ou /caixa (e sido mandado para o login) seria devolvido a uma area
  * sem permissoes e apanharia um 403 imediatamente a seguir ao login -- por
- * isso vai sempre para o POS, a unica area a que tem acesso.
+ * isso vai sempre para o GIM, a unica area a que tem acesso.
  */
 function destinoAposLogin(utilizador, next) {
   const inicial = areaInicial(utilizador);
@@ -61,8 +61,8 @@ async function login(req, res, next) {
 }
 
 /**
- * Login rapido por PIN no POS (usado por ecra touch).
- * Vai sempre para /pos, independentemente do perfil: o PIN e por definicao a
+ * Login rapido por PIN no GIM (usado por ecra touch).
+ * Vai sempre para /gim, independentemente do perfil: o PIN e por definicao a
  * entrada de balcao. Um admin que queira o backoffice entra por password.
  */
 async function loginPorPin(req, res, next) {
@@ -82,7 +82,7 @@ async function loginPorPin(req, res, next) {
   req.session.regenerate((err) => {
     if (err) return next(err);
     req.session.utilizador = utilizador;
-    res.redirect('/pos');
+    res.redirect('/gim');
   });
 }
 

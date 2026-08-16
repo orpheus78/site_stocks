@@ -17,7 +17,7 @@ E2E ficaram por implementar/correr.
 
 ## O que devia ser coberto (para implementação futura)
 
-Quando houver MariaDB ou Docker disponível, criar `tests/e2e/vendas.e2e.test.js`
+Quando houver MariaDB ou Docker disponível, criar `tests/e2e/consumos.e2e.test.js`
 (ou equivalente) cobrindo o fluxo real completo:
 
 1. Criar uma base de dados de teste dedicada (ex.: `bar_test`), nunca reutilizar
@@ -30,13 +30,13 @@ Quando houver MariaDB ou Docker disponível, criar `tests/e2e/vendas.e2e.test.js
 4. Fluxo a validar:
    - Login com utilizador de teste.
    - Abrir caixa com fundo inicial conhecido.
-   - `POST /api/vendas` com um artigo e quantidade conhecidos.
+   - `POST /api/consumos` com um artigo e quantidade conhecidos.
    - Confirmar que o `stock.quantidade` foi decrementado corretamente na BD.
    - Confirmar que foi criado um registo em `movimentos_stock` do tipo
-     `venda` com `quantidade_apos` correto.
-   - Confirmar que `GET /pos/venda/:id/talao` renderiza 200 com o número da
-     venda e os itens corretos.
-   - Anular a venda (`POST /admin/vendas/:id/anular`) e confirmar que o stock
+     `consumo` com `quantidade_apos` correto.
+   - Confirmar que `GET /gim/consumo/:id/talao` responde **404**: a aplicação é
+     de controlo interno e não emite talão/comprovativo.
+   - Anular o consumo (`POST /admin/consumos/:id/anular`) e confirmar que o stock
      é reposto (movimento `entrada` criado, quantidade de volta ao valor
      original).
    - Fechar a caixa e confirmar que `esperado`/`diferenca` batem certo:
@@ -46,14 +46,14 @@ Quando houver MariaDB ou Docker disponível, criar `tests/e2e/vendas.e2e.test.js
    truncar todas as tabelas usadas), mesmo que o teste falhe (usar
    `after`/`finally`).
 6. Nunca correr contra a base de dados de produção nem usar dados reais de
-   clientes/vendas.
+   clientes/consumos.
 
 Sugestão de guarda no próprio ficheiro de teste, para que a suite principal
 (`npm test`) não falhe quando o E2E não pode correr:
 
 ```js
 const semBD = !process.env.TEST_DB_HOST;
-describe('E2E vendas (BD real)', { skip: semBD && 'MariaDB de teste nao configurada (TEST_DB_HOST em falta)' }, () => {
+describe('E2E consumos (BD real)', { skip: semBD && 'MariaDB de teste nao configurada (TEST_DB_HOST em falta)' }, () => {
   // ...
 });
 ```

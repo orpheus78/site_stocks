@@ -33,9 +33,9 @@
 
    DOIS ASPETOS, UMA SO API:
      - backoffice/caixa -> modal Bootstrap 5.3 (ja carregado no layout);
-     - ecra do POS      -> painel escuro com os estilos do proprio POS
-                           (.pos-confirmar), botoes >= 80px.
-   O adaptador e escolhido automaticamente por `body.pos-body`.
+     - ecra do GIM      -> painel escuro com os estilos do proprio GIM
+                           (.gim-confirmar), botoes >= 80px.
+   O adaptador e escolhido automaticamente por `body.gim-body`.
 
    DEGRADACAO (decisao deliberada): se este ficheiro ou o Bootstrap nao
    carregarem, `pedir()` devolve `false` e o chamador deixa a accao seguir.
@@ -323,32 +323,32 @@
     }
   };
 
-  // ---------------------------------------------------- adaptador: POS (touch)
+  // ---------------------------------------------------- adaptador: GIM (touch)
 
-  var posEl = null;
+  var gimEl = null;
 
-  function marcacaoPos() {
-    if (posEl) return posEl;
+  function marcacaoGim() {
+    if (gimEl) return gimEl;
 
-    var raizEl = criar('div', 'pos-confirmar', 'posConfirmacao');
+    var raizEl = criar('div', 'gim-confirmar', 'gimConfirmacao');
     raizEl.setAttribute('role', 'dialog');
     raizEl.setAttribute('aria-modal', 'true');
-    raizEl.setAttribute('aria-labelledby', 'posConfirmacaoTitulo');
-    raizEl.setAttribute('aria-describedby', 'posConfirmacaoMensagem');
+    raizEl.setAttribute('aria-labelledby', 'gimConfirmacaoTitulo');
+    raizEl.setAttribute('aria-describedby', 'gimConfirmacaoMensagem');
     raizEl.hidden = true;
 
-    var caixa = criar('div', 'pos-confirmar-caixa');
-    var titulo = criar('h2', 'pos-confirmar-titulo', 'posConfirmacaoTitulo');
-    var mensagem = criar('p', 'pos-confirmar-mensagem', 'posConfirmacaoMensagem');
-    var detalhe = criar('p', 'pos-confirmar-detalhe', 'posConfirmacaoDetalhe');
+    var caixa = criar('div', 'gim-confirmar-caixa');
+    var titulo = criar('h2', 'gim-confirmar-titulo', 'gimConfirmacaoTitulo');
+    var mensagem = criar('p', 'gim-confirmar-mensagem', 'gimConfirmacaoMensagem');
+    var detalhe = criar('p', 'gim-confirmar-detalhe', 'gimConfirmacaoDetalhe');
 
-    var accoes = criar('div', 'pos-confirmar-accoes');
+    var accoes = criar('div', 'gim-confirmar-accoes');
     // ORDEM DELIBERADA: "Cancelar" fica onde o operador ja esta habituado a
     // ter o botao de recuo (esquerda). O botao destrutivo NUNCA ocupa esse
     // lugar — e vermelho, esta afastado e exige toque explicito.
-    var cancelar = criar('button', 'pos-confirmar-cancelar', 'posConfirmacaoCancelar');
+    var cancelar = criar('button', 'gim-confirmar-cancelar', 'gimConfirmacaoCancelar');
     cancelar.type = 'button';
-    var ok = criar('button', 'pos-confirmar-ok', 'posConfirmacaoOk');
+    var ok = criar('button', 'gim-confirmar-ok', 'gimConfirmacaoOk');
     ok.type = 'button';
     accoes.appendChild(cancelar);
     accoes.appendChild(ok);
@@ -374,7 +374,7 @@
       fechar(false);
     });
 
-    // Toque fora da caixa fecha (gesto habitual no POS) — e sempre CANCELAR.
+    // Toque fora da caixa fecha (gesto habitual no GIM) — e sempre CANCELAR.
     raizEl.addEventListener('click', function (ev) {
       if (ev.target === raizEl) fechar(false);
     });
@@ -400,7 +400,7 @@
       }
     });
 
-    posEl = {
+    gimEl = {
       raiz: raizEl,
       caixa: caixa,
       titulo: titulo,
@@ -409,25 +409,25 @@
       ok: ok,
       cancelar: cancelar
     };
-    return posEl;
+    return gimEl;
   }
 
-  var adaptadorPos = {
+  var adaptadorGim = {
     disponivel: function () {
       return !!(
         document.body &&
         document.body.className &&
-        document.body.className.indexOf('pos-body') !== -1
+        document.body.className.indexOf('gim-body') !== -1
       );
     },
     mostrar: function (o) {
-      var m = marcacaoPos();
+      var m = marcacaoGim();
       m.titulo.textContent = o.titulo;
       m.mensagem.textContent = o.mensagem;
       escrever(m.detalhe, o.detalhe);
       m.ok.textContent = o.textoConfirmar;
       m.cancelar.textContent = o.textoCancelar;
-      m.ok.className = 'pos-confirmar-ok' + (o.perigo ? ' is-perigo' : '');
+      m.ok.className = 'gim-confirmar-ok' + (o.perigo ? ' is-perigo' : '');
       m.raiz.hidden = false;
       // Accao destrutiva: foco no botao menos destrutivo.
       (o.perigo ? m.cancelar : m.ok).focus();
@@ -436,7 +436,7 @@
   };
 
   function escolherAdaptador() {
-    if (adaptadorPos.disponivel()) return adaptadorPos;
+    if (adaptadorGim.disponivel()) return adaptadorGim;
     if (adaptadorBootstrap.disponivel()) return adaptadorBootstrap;
     return null;
   }

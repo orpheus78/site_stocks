@@ -21,7 +21,7 @@ async function autenticar(username, password) {
   return sessaoDoUtilizador(utilizador);
 }
 
-/** Login rapido no POS: procura o utilizador ativo cujo PIN corresponde. */
+/** Login rapido no GIM: procura o utilizador ativo cujo PIN corresponde. */
 async function autenticarPorPin(pin) {
   const candidatos = await utilizadoresRepo.ativosComPin();
   for (const u of candidatos) {

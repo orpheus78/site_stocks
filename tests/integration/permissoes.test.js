@@ -2,8 +2,8 @@
 
 /**
  * Autorizacao por perfil (requisito do cliente):
- *   - admin       -> backoffice (/admin/*), caixa (/caixa/*) e POS
- *   - funcionario -> APENAS o POS (venda, catalogo, talao) e o logout
+ *   - admin       -> backoffice (/admin/*), caixa (/caixa/*) e GIM
+ *   - funcionario -> APENAS o GIM (registo de movimentos, catalogo) e o logout
  *
  * O que se verifica aqui e a guarda do SERVIDOR, nao o que a UI esconde:
  * esconder links e usabilidade, o 403 e que e seguranca.
@@ -43,7 +43,7 @@ const FUNCIONARIO = {
 const UTILIZADORES = [ADMIN, FUNCIONARIO];
 
 /**
- * Handlers suficientes para as paginas do backoffice, da caixa e do POS
+ * Handlers suficientes para as paginas do backoffice, da caixa e do GIM
  * renderizarem com listas vazias. A ordem importa: o primeiro padrao ganha.
  */
 function handlers() {
@@ -60,16 +60,16 @@ function handlers() {
     { pattern: /FROM movimentos_caixa/i, handler: () => [] },
     { pattern: /INSERT INTO sessoes_caixa/i, handler: () => ({ insertId: 1 }) },
     // Movimentos que ficaram sem sessao de caixa (aviso do ecra /caixa).
-    { pattern: /FROM vendas[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_vendas: 0, total: 0 }] },
+    { pattern: /FROM consumos[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_consumos: 0, total: 0 }] },
 
     // Relatorios / dashboard
     { pattern: /DATE\(v\.criado_em\) AS dia/i, handler: () => [] },
     {
-      pattern: /COUNT\(\*\) AS n_vendas[\s\S]*FROM vendas v/i,
-      handler: () => [{ n_vendas: 0, total: 0, dinheiro: 0, multibanco: 0, ticket_medio: 0 }]
+      pattern: /COUNT\(\*\) AS n_consumos[\s\S]*FROM consumos v/i,
+      handler: () => [{ n_consumos: 0, total: 0, dinheiro: 0, multibanco: 0, ticket_medio: 0 }]
     },
-    { pattern: /FROM venda_itens vi/i, handler: () => [] },
-    { pattern: /FROM vendas v/i, handler: () => [] },
+    { pattern: /FROM consumo_itens vi/i, handler: () => [] },
+    { pattern: /FROM consumos v/i, handler: () => [] },
     { pattern: /FROM movimentos_stock/i, handler: () => [] },
 
     // Catalogo / stocks
@@ -103,7 +103,7 @@ const AREAS_ADMIN = [
   '/admin/categorias',
   '/admin/stocks',
   '/admin/movimentos',
-  '/admin/vendas',
+  '/admin/consumos',
   '/admin/relatorios',
   '/caixa'
 ];
@@ -114,7 +114,7 @@ const POSTS_CAIXA = [
   { rota: '/caixa/fechar', corpo: { total_contado: '60.00' } }
 ];
 
-describe('Perfil funcionario — bloqueado fora do POS', () => {
+describe('Perfil funcionario — bloqueado fora do GIM', () => {
   let funcionario;
 
   before(async () => {
@@ -148,33 +148,33 @@ describe('Perfil funcionario — bloqueado fora do POS', () => {
   });
 });
 
-describe('Perfil funcionario — acesso ao POS permitido', () => {
+describe('Perfil funcionario — acesso ao GIM permitido', () => {
   let funcionario;
 
   before(async () => {
     funcionario = await sessaoDe(FUNCIONARIO);
   });
 
-  test('GET /pos responde 200', async () => {
-    const res = await funcionario.get('/pos');
+  test('GET /gim responde 200', async () => {
+    const res = await funcionario.get('/gim');
     assert.equal(res.status, 200);
   });
 
-  test('GET /api/pos/artigos responde 200 com o catalogo', async () => {
-    const res = await funcionario.get('/api/pos/artigos');
+  test('GET /api/gim/artigos responde 200 com o catalogo', async () => {
+    const res = await funcionario.get('/api/gim/artigos');
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.artigos));
     assert.ok(Array.isArray(res.body.categorias));
   });
 
-  test('O POS nao mostra atalhos para caixa nem para o backoffice', async () => {
-    const res = await funcionario.get('/pos');
+  test('O GIM nao mostra atalhos para caixa nem para o backoffice', async () => {
+    const res = await funcionario.get('/gim');
     assert.doesNotMatch(res.text, /href="\/admin"/);
     assert.doesNotMatch(res.text, /href="\/caixa"/);
   });
 
   test('Sem caixa aberta o ecra avisa o funcionario mas nao bloqueia o registo', async () => {
-    const res = await funcionario.get('/pos');
+    const res = await funcionario.get('/gim');
     // Sem caixa aberta (handler devolve []) o registo continua disponivel, mas
     // o aviso tem de aparecer: os movimentos internos contam para o dinheiro
     // esperado em caixa, logo sem sessao ficam fora de qualquer fecho.
@@ -187,9 +187,9 @@ describe('Perfil funcionario — acesso ao POS permitido', () => {
   });
 
   test('O ecra nao mostra mecanica de dinheiro (PAGAR, metodos, troco)', async () => {
-    const res = await funcionario.get('/pos');
+    const res = await funcionario.get('/gim');
     for (const proibido of ['PAGAR', 'Multibanco', 'Troco', 'Dinheiro']) {
-      assert.ok(!res.text.includes(proibido), `o POS nao devia conter "${proibido}"`);
+      assert.ok(!res.text.includes(proibido), `o GIM nao devia conter "${proibido}"`);
     }
   });
 });
@@ -208,8 +208,8 @@ describe('Perfil admin — acesso total', () => {
     });
   }
 
-  test('GET /pos e permitido e mostra os atalhos de caixa e gestao', async () => {
-    const res = await admin.get('/pos');
+  test('GET /gim e permitido e mostra os atalhos de caixa e gestao', async () => {
+    const res = await admin.get('/gim');
     assert.equal(res.status, 200);
     assert.match(res.text, /href="\/admin"/);
     assert.match(res.text, /href="\/caixa"/);
@@ -259,24 +259,24 @@ describe('Redirect por perfil apos autenticacao', () => {
     assert.equal(res.headers.location, '/admin/stocks');
   });
 
-  test('Funcionario sem "next" vai para o POS', async () => {
+  test('Funcionario sem "next" vai para o GIM', async () => {
     const res = await request(app)
       .post('/login')
       .type('form')
       .send({ username: FUNCIONARIO.username, password: PASSWORD });
 
     assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/pos');
+    assert.equal(res.headers.location, '/gim');
   });
 
-  test('Funcionario com "next" para area de admin vai na mesma para o POS (evita 403 imediato)', async () => {
+  test('Funcionario com "next" para area de admin vai na mesma para o GIM (evita 403 imediato)', async () => {
     const res = await request(app)
       .post('/login')
       .type('form')
       .send({ username: FUNCIONARIO.username, password: PASSWORD, next: '/caixa' });
 
     assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/pos');
+    assert.equal(res.headers.location, '/gim');
   });
 
   test('Um "next" externo continua a ser ignorado (open redirect)', async () => {
@@ -308,10 +308,10 @@ describe('GET / encaminha cada perfil para a sua area', () => {
     assert.equal(res.headers.location, '/admin');
   });
 
-  test('Funcionario vai para /pos', async () => {
+  test('Funcionario vai para /gim', async () => {
     const funcionario = await sessaoDe(FUNCIONARIO);
     const res = await funcionario.get('/');
     assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/pos');
+    assert.equal(res.headers.location, '/gim');
   });
 });

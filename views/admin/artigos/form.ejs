@@ -1,7 +1,9 @@
 <%#
   Campos conforme validators em routes/artigos.routes.js:
-  nome, preco, categoria_id, ordem, stock_minimo, stock_inicial, unidade, ativo, imagem (multipart).
-  O preco e o valor final cobrado ao cliente.
+  nome, preco, preco_custo, categoria_id, ordem, stock_minimo, stock_inicial,
+  unidade, ativo, imagem (multipart).
+  O preco e o valor final cobrado ao cliente; o preco_custo e quanto custa
+  comprar uma unidade (ambos sem IVA).
 %>
 <h1 class="h4 mb-3"><%= titulo %></h1>
 
@@ -21,7 +23,25 @@
     <div class="form-text">Valor final cobrado ao cliente.</div>
   </div>
 
-  <div class="col-md-6">
+  <%#
+    Preco de custo: type="text" + inputmode="decimal" + data-campo-decimal
+    (nunca type="number"). Dois bugs ja conhecidos justificam-no:
+      - type="number" descarta estados intermedios como "0," e esvazia o campo;
+      - Number("0,40") e NaN, e em pt-PT escreve-se com virgula.
+    A edicao no cliente e a conversao para "0.40" no submit vem de
+    /js/valor-decimal.js (via /js/app.js); o servidor aceita os dois formatos
+    (utils.decimalEntrada em routes/artigos.routes.js).
+  %>
+  <div class="col-md-4">
+    <label class="form-label" for="preco_custo">Preco de custo (€)</label>
+    <input type="text" inputmode="decimal" pattern="[0-9]+([.,][0-9]{1,2})?"
+           autocomplete="off" data-campo-decimal class="form-control form-control-lg"
+           id="preco_custo" name="preco_custo" placeholder="0,00"
+           value="<%= artigo && Number(artigo.preco_custo) ? Number(artigo.preco_custo).toFixed(2) : '' %>">
+    <div class="form-text">Quanto custa comprar UMA unidade. Nao aparece no ecra de registo.</div>
+  </div>
+
+  <div class="col-md-8">
     <label class="form-label" for="categoria_id">Categoria</label>
     <select class="form-select" id="categoria_id" name="categoria_id">
       <option value="">(sem categoria)</option>
@@ -34,14 +54,14 @@
   <div class="col-md-3">
     <label class="form-label" for="ordem">Ordem</label>
     <input type="number" min="0" class="form-control" id="ordem" name="ordem" value="<%= artigo ? artigo.ordem : 0 %>">
-    <div class="form-text">Posicao no POS.</div>
+    <div class="form-text">Posicao no ecra de registo (GIM).</div>
   </div>
 
   <div class="col-md-3 d-flex align-items-center">
     <div class="form-check form-switch mt-3">
       <input type="checkbox" class="form-check-input" id="ativo" name="ativo" value="1"
              <%= !artigo || artigo.ativo ? 'checked' : '' %>>
-      <label class="form-check-label" for="ativo">Ativo (visivel no POS)</label>
+      <label class="form-check-label" for="ativo">Ativo (visivel no Resgisto)</label>
     </div>
   </div>
 
@@ -73,7 +93,7 @@
   <div class="col-md-7">
     <label class="form-label" for="imagem">Ficheiro (JPEG/PNG/WEBP, max 2MB)</label>
     <input type="file" class="form-control" id="imagem" name="imagem" accept="image/jpeg,image/png,image/webp">
-    <div class="form-text">Sem imagem, o POS mostra um botao com a cor da categoria.</div>
+    <div class="form-text">Sem imagem, o GIM mostra um botao com a cor da categoria.</div>
   </div>
 
   <div class="col-md-5 d-flex align-items-end gap-3">

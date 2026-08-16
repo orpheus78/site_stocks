@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS artigos (
   categoria_id INT UNSIGNED NULL,
   nome         VARCHAR(120) NOT NULL,
   preco        DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  -- Custo de compra POR UNIDADE (sem IVA, tal como o preco). Serve para a
+  -- analise de margem no backoffice; nunca e mostrado no GIM.
+  preco_custo  DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   imagem       VARCHAR(255) NULL,
   ativo        TINYINT(1) NOT NULL DEFAULT 1,
   ordem        INT NOT NULL DEFAULT 0,
@@ -60,7 +63,7 @@ CREATE TABLE IF NOT EXISTS stocks (
 CREATE TABLE IF NOT EXISTS movimentos_stock (
   id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
   artigo_id       INT UNSIGNED NOT NULL,
-  tipo            ENUM('entrada','saida','ajuste','venda') NOT NULL,
+  tipo            ENUM('entrada','saida','ajuste','consumo') NOT NULL,
   quantidade      DECIMAL(10,2) NOT NULL,
   quantidade_apos DECIMAL(10,2) NOT NULL,
   motivo          VARCHAR(255) NULL,
@@ -106,7 +109,7 @@ CREATE TABLE IF NOT EXISTS movimentos_caixa (
     REFERENCES sessoes_caixa (id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS vendas (
+CREATE TABLE IF NOT EXISTS consumos (
   id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
   numero            INT UNSIGNED NOT NULL,
   total             DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -119,29 +122,33 @@ CREATE TABLE IF NOT EXISTS vendas (
   sessao_caixa_id   INT UNSIGNED NULL,
   criado_em         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_vendas_numero (numero),
-  KEY ix_vendas_criado_em (criado_em),
-  KEY ix_vendas_estado (estado),
-  KEY ix_vendas_sessao (sessao_caixa_id),
-  CONSTRAINT fk_vendas_utilizador FOREIGN KEY (utilizador_id)
+  UNIQUE KEY uq_consumos_numero (numero),
+  KEY ix_consumos_criado_em (criado_em),
+  KEY ix_consumos_estado (estado),
+  KEY ix_consumos_sessao (sessao_caixa_id),
+  CONSTRAINT fk_consumos_utilizador FOREIGN KEY (utilizador_id)
     REFERENCES utilizadores (id) ON DELETE SET NULL ON UPDATE CASCADE,
-  CONSTRAINT fk_vendas_sessao FOREIGN KEY (sessao_caixa_id)
+  CONSTRAINT fk_consumos_sessao FOREIGN KEY (sessao_caixa_id)
     REFERENCES sessoes_caixa (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS venda_itens (
+CREATE TABLE IF NOT EXISTS consumo_itens (
   id            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  venda_id      INT UNSIGNED NOT NULL,
+  consumo_id    INT UNSIGNED NOT NULL,
   artigo_id     INT UNSIGNED NULL,
   nome_snapshot VARCHAR(120) NOT NULL,
   preco_unit    DECIMAL(10,2) NOT NULL,
+  -- Snapshot do custo unitario no momento do consumo, pela mesma razao do
+  -- `preco_unit`: alterar hoje o custo de compra de um artigo nao pode
+  -- reescrever a margem dos meses anteriores.
+  custo_unit    DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   quantidade    DECIMAL(10,2) NOT NULL,
   subtotal      DECIMAL(10,2) NOT NULL,
   PRIMARY KEY (id),
-  KEY ix_venda_itens_venda (venda_id),
-  KEY ix_venda_itens_artigo (artigo_id),
-  CONSTRAINT fk_venda_itens_venda FOREIGN KEY (venda_id)
-    REFERENCES vendas (id) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT fk_venda_itens_artigo FOREIGN KEY (artigo_id)
+  KEY ix_consumo_itens_consumo (consumo_id),
+  KEY ix_consumo_itens_artigo (artigo_id),
+  CONSTRAINT fk_consumo_itens_consumo FOREIGN KEY (consumo_id)
+    REFERENCES consumos (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_consumo_itens_artigo FOREIGN KEY (artigo_id)
     REFERENCES artigos (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

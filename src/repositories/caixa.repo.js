@@ -58,7 +58,7 @@ async function movimentosDaSessao(sessaoId, conn) {
 }
 
 /**
- * Totais de vendas/movimentos concluidos associados a uma sessao, por metodo.
+ * Totais de consumos/movimentos concluidos associados a uma sessao, por metodo.
  *
  * `dinheiro`   -> dinheiro fisico recebido em VENDAS antigas, liquido de troco.
  *                 So metodos historicos ('dinheiro', 'multibanco', 'misto');
@@ -70,22 +70,22 @@ async function movimentosDaSessao(sessaoId, conn) {
  *
  * Apenas registos com estado = 'concluida': anulados nao contam.
  */
-async function totaisVendas(sessaoId, conn) {
+async function totaisConsumos(sessaoId, conn) {
   const rows = await run(conn).query(
-    `SELECT COUNT(*) AS n_vendas,
+    `SELECT COUNT(*) AS n_consumos,
             COALESCE(SUM(total), 0) AS total,
             COALESCE(SUM(CASE WHEN metodo_pagamento <> 'interno'
                               THEN valor_dinheiro - troco ELSE 0 END), 0) AS dinheiro,
             COALESCE(SUM(CASE WHEN metodo_pagamento = 'interno'
                               THEN total ELSE 0 END), 0) AS interno,
             COALESCE(SUM(valor_multibanco), 0) AS multibanco
-     FROM vendas
+     FROM consumos
      WHERE sessao_caixa_id = ? AND estado = 'concluida'`,
     [sessaoId]
   );
   const r = rows[0];
   return {
-    n_vendas: Number(r.n_vendas),
+    n_consumos: Number(r.n_consumos),
     total: Number(r.total),
     dinheiro: Number(r.dinheiro),
     interno: Number(r.interno),
@@ -101,13 +101,13 @@ async function totaisVendas(sessaoId, conn) {
  */
 async function totaisSemSessao(conn) {
   const rows = await run(conn).query(
-    `SELECT COUNT(*) AS n_vendas,
+    `SELECT COUNT(*) AS n_consumos,
             COALESCE(SUM(total), 0) AS total
-     FROM vendas
+     FROM consumos
      WHERE sessao_caixa_id IS NULL AND estado = 'concluida'`
   );
   const r = rows[0];
-  return { n_vendas: Number(r.n_vendas), total: Number(r.total) };
+  return { n_consumos: Number(r.n_consumos), total: Number(r.total) };
 }
 
 async function historico(limite = 50, conn) {
@@ -128,7 +128,7 @@ module.exports = {
   fechar,
   registarMovimento,
   movimentosDaSessao,
-  totaisVendas,
+  totaisConsumos,
   totaisSemSessao,
   historico
 };

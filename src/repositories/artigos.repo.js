@@ -3,7 +3,7 @@
 const { run } = require('./base');
 
 const SELECT_BASE = `
-  SELECT a.id, a.categoria_id, a.nome, a.preco, a.imagem, a.ativo, a.ordem, a.criado_em,
+  SELECT a.id, a.categoria_id, a.nome, a.preco, a.preco_custo, a.imagem, a.ativo, a.ordem, a.criado_em,
          c.nome AS categoria_nome, c.cor AS categoria_cor,
          s.quantidade, s.stock_minimo, s.unidade
   FROM artigos a
@@ -30,20 +30,20 @@ async function porId(id, conn) {
   return rows[0] || null;
 }
 
-async function criar({ categoria_id, nome, preco, imagem, ativo, ordem }, conn) {
+async function criar({ categoria_id, nome, preco, preco_custo, imagem, ativo, ordem }, conn) {
   const res = await run(conn).query(
-    'INSERT INTO artigos (categoria_id, nome, preco, imagem, ativo, ordem) VALUES (?, ?, ?, ?, ?, ?)',
-    [categoria_id || null, nome, preco, imagem || null, ativo ? 1 : 0, ordem]
+    'INSERT INTO artigos (categoria_id, nome, preco, preco_custo, imagem, ativo, ordem) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [categoria_id || null, nome, preco, preco_custo || 0, imagem || null, ativo ? 1 : 0, ordem]
   );
   return res.insertId;
 }
 
-async function atualizar(id, { categoria_id, nome, preco, imagem, ativo, ordem }, conn) {
+async function atualizar(id, { categoria_id, nome, preco, preco_custo, imagem, ativo, ordem }, conn) {
   await run(conn).query(
     `UPDATE artigos
-     SET categoria_id = ?, nome = ?, preco = ?, imagem = ?, ativo = ?, ordem = ?
+     SET categoria_id = ?, nome = ?, preco = ?, preco_custo = ?, imagem = ?, ativo = ?, ordem = ?
      WHERE id = ?`,
-    [categoria_id || null, nome, preco, imagem || null, ativo ? 1 : 0, ordem, id]
+    [categoria_id || null, nome, preco, preco_custo || 0, imagem || null, ativo ? 1 : 0, ordem, id]
   );
 }
 
@@ -55,9 +55,9 @@ async function desativar(id, conn) {
   await run(conn).query('UPDATE artigos SET ativo = 0 WHERE id = ?', [id]);
 }
 
-async function temVendas(id, conn) {
-  const rows = await run(conn).query('SELECT COUNT(*) AS total FROM venda_itens WHERE artigo_id = ?', [id]);
+async function temConsumos(id, conn) {
+  const rows = await run(conn).query('SELECT COUNT(*) AS total FROM consumo_itens WHERE artigo_id = ?', [id]);
   return Number(rows[0].total) > 0;
 }
 
-module.exports = { listar, porId, criar, atualizar, remover, desativar, temVendas };
+module.exports = { listar, porId, criar, atualizar, remover, desativar, temConsumos };

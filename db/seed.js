@@ -23,7 +23,7 @@ const ADMIN = {
   role: 'admin'
 };
 
-// Perfil de venda: so tem acesso ao POS (ver src/middleware/auth.js).
+// Perfil de balcao: so tem acesso ao GIM (ver src/middleware/auth.js).
 const FUNCIONARIO = {
   nome: 'Funcionario Bar',
   username: process.env.SEED_BAR_USERNAME || 'bar',
@@ -42,36 +42,39 @@ const CATEGORIAS = [
 ];
 
 // preco = valor final ao cliente (sem IVA em lado nenhum)
+// custo = preco de compra POR UNIDADE (tambem sem IVA). Valores tipicos de um
+// bar de campo de futebol: o custo fica entre ~30% (cafes e bebidas de maior
+// rotacao) e ~47% (sandes e comida preparada, onde a margem e menor) do preco.
 const ARTIGOS = [
-  { categoria: 'Cafes', nome: 'Cafe', preco: 0.70, stock: 200, minimo: 40 },
-  { categoria: 'Cafes', nome: 'Cafe duplo', preco: 1.20, stock: 100, minimo: 20 },
-  { categoria: 'Cafes', nome: 'Galao', preco: 1.10, stock: 80, minimo: 15 },
-  { categoria: 'Cafes', nome: 'Cha', preco: 0.90, stock: 60, minimo: 10 },
+  { categoria: 'Cafes', nome: 'Cafe', preco: 0.70, custo: 0.22, stock: 200, minimo: 40 },
+  { categoria: 'Cafes', nome: 'Cafe duplo', preco: 1.20, custo: 0.40, stock: 100, minimo: 20 },
+  { categoria: 'Cafes', nome: 'Galao', preco: 1.10, custo: 0.35, stock: 80, minimo: 15 },
+  { categoria: 'Cafes', nome: 'Cha', preco: 0.90, custo: 0.30, stock: 60, minimo: 10 },
 
-  { categoria: 'Bebidas', nome: 'Agua 0.5L', preco: 0.80, stock: 120, minimo: 24 },
-  { categoria: 'Bebidas', nome: 'Coca-Cola', preco: 1.50, stock: 96, minimo: 24 },
-  { categoria: 'Bebidas', nome: 'Ice Tea', preco: 1.40, stock: 72, minimo: 12 },
-  { categoria: 'Bebidas', nome: 'Sumo laranja', preco: 1.60, stock: 48, minimo: 12 },
-  { categoria: 'Bebidas', nome: 'Bebida energetica', preco: 2.00, stock: 36, minimo: 12 },
+  { categoria: 'Bebidas', nome: 'Agua 0.5L', preco: 0.80, custo: 0.25, stock: 120, minimo: 24 },
+  { categoria: 'Bebidas', nome: 'Coca-Cola', preco: 1.50, custo: 0.55, stock: 96, minimo: 24 },
+  { categoria: 'Bebidas', nome: 'Ice Tea', preco: 1.40, custo: 0.50, stock: 72, minimo: 12 },
+  { categoria: 'Bebidas', nome: 'Sumo laranja', preco: 1.60, custo: 0.60, stock: 48, minimo: 12 },
+  { categoria: 'Bebidas', nome: 'Bebida energetica', preco: 2.00, custo: 0.90, stock: 36, minimo: 12 },
 
-  { categoria: 'Cervejas', nome: 'Imperial', preco: 1.20, stock: 150, minimo: 30 },
-  { categoria: 'Cervejas', nome: 'Caneca', preco: 2.00, stock: 80, minimo: 20 },
-  { categoria: 'Cervejas', nome: 'Cerveja garrafa 33cl', preco: 1.50, stock: 96, minimo: 24 },
-  { categoria: 'Cervejas', nome: 'Cerveja sem alcool', preco: 1.50, stock: 24, minimo: 6 },
+  { categoria: 'Cervejas', nome: 'Imperial', preco: 1.20, custo: 0.40, stock: 150, minimo: 30 },
+  { categoria: 'Cervejas', nome: 'Caneca', preco: 2.00, custo: 0.75, stock: 80, minimo: 20 },
+  { categoria: 'Cervejas', nome: 'Cerveja garrafa 33cl', preco: 1.50, custo: 0.60, stock: 96, minimo: 24 },
+  { categoria: 'Cervejas', nome: 'Cerveja sem alcool', preco: 1.50, custo: 0.65, stock: 24, minimo: 6 },
 
-  { categoria: 'Snacks', nome: 'Batatas fritas pacote', preco: 1.20, stock: 60, minimo: 12 },
-  { categoria: 'Snacks', nome: 'Amendoins', preco: 1.00, stock: 40, minimo: 10 },
-  { categoria: 'Snacks', nome: 'Tremocos', preco: 1.50, stock: 30, minimo: 8 },
-  { categoria: 'Snacks', nome: 'Chocolate', preco: 1.00, stock: 50, minimo: 10 },
+  { categoria: 'Snacks', nome: 'Batatas fritas pacote', preco: 1.20, custo: 0.50, stock: 60, minimo: 12 },
+  { categoria: 'Snacks', nome: 'Amendoins', preco: 1.00, custo: 0.40, stock: 40, minimo: 10 },
+  { categoria: 'Snacks', nome: 'Tremocos', preco: 1.50, custo: 0.55, stock: 30, minimo: 8 },
+  { categoria: 'Snacks', nome: 'Chocolate', preco: 1.00, custo: 0.45, stock: 50, minimo: 10 },
 
-  { categoria: 'Sandes', nome: 'Sandes de fiambre', preco: 2.50, stock: 25, minimo: 5 },
-  { categoria: 'Sandes', nome: 'Sandes mista', preco: 2.80, stock: 20, minimo: 5 },
-  { categoria: 'Sandes', nome: 'Bifana', preco: 3.00, stock: 30, minimo: 8 },
-  { categoria: 'Sandes', nome: 'Cachorro', preco: 2.50, stock: 25, minimo: 6 },
-  { categoria: 'Sandes', nome: 'Tosta mista', preco: 3.00, stock: 20, minimo: 5 },
+  { categoria: 'Sandes', nome: 'Sandes de fiambre', preco: 2.50, custo: 1.10, stock: 25, minimo: 5 },
+  { categoria: 'Sandes', nome: 'Sandes mista', preco: 2.80, custo: 1.30, stock: 20, minimo: 5 },
+  { categoria: 'Sandes', nome: 'Bifana', preco: 3.00, custo: 1.40, stock: 30, minimo: 8 },
+  { categoria: 'Sandes', nome: 'Cachorro', preco: 2.50, custo: 1.15, stock: 25, minimo: 6 },
+  { categoria: 'Sandes', nome: 'Tosta mista', preco: 3.00, custo: 1.35, stock: 20, minimo: 5 },
 
-  { categoria: 'Gelados', nome: 'Gelado', preco: 1.50, stock: 40, minimo: 10 },
-  { categoria: 'Gelados', nome: 'Gelado premium', preco: 2.50, stock: 20, minimo: 5 }
+  { categoria: 'Gelados', nome: 'Gelado', preco: 1.50, custo: 0.65, stock: 40, minimo: 10 },
+  { categoria: 'Gelados', nome: 'Gelado premium', preco: 2.50, custo: 1.15, stock: 20, minimo: 5 }
 ];
 
 /** Cria o utilizador se ainda nao existir. Idempotente pelo `username` (unico). */
@@ -124,8 +127,8 @@ async function seedArtigos(categorias, utilizadorId) {
     if (existente) continue;
 
     const res = await db.query(
-      'INSERT INTO artigos (categoria_id, nome, preco, ativo, ordem) VALUES (?, ?, ?, 1, ?)',
-      [categorias.get(art.categoria) || null, art.nome, art.preco, ordem]
+      'INSERT INTO artigos (categoria_id, nome, preco, preco_custo, ativo, ordem) VALUES (?, ?, ?, ?, 1, ?)',
+      [categorias.get(art.categoria) || null, art.nome, art.preco, art.custo, ordem]
     );
     const artigoId = res.insertId;
 

@@ -3,8 +3,8 @@
 /**
  * Testes end-to-end contra uma MariaDB REAL (contentor Docker).
  *
- * Cobrem o fluxo completo do bar: login -> abertura de caixa -> vendas ->
- * talao -> anulacao -> movimentos de caixa -> fecho -> backoffice -> relatorios,
+ * Cobrem o fluxo completo do bar: login -> abertura de caixa -> movimentos ->
+ * anulacao -> movimentos de caixa -> fecho -> backoffice -> relatorios,
  * sempre com asserçoes diretas na base de dados (nao apenas na resposta HTTP).
  *
  * SEGURANCA / ISOLAMENTO
@@ -75,7 +75,7 @@ const ADMIN = {
   pin: process.env.SEED_ADMIN_PIN || '1234'
 };
 
-// Perfil de venda: so tem acesso ao POS.
+// Perfil de consumo: so tem acesso ao GIM.
 const FUNCIONARIO = {
   username: process.env.SEED_BAR_USERNAME || 'bar',
   password: process.env.SEED_BAR_PASSWORD || 'bar123',
@@ -158,9 +158,9 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
 
   const ficheirosUpload = [];
   let sessaoCaixaId = null;
-  let vendaAnulavel = null;
-  let vendaMultibanco = null;
-  let vendaDinheiro = null;
+  let consumoAnulavel = null;
+  let consumoMultibanco = null;
+  let consumoDinheiro = null;
 
   try {
     // Sanidade da preparacao: as 9 tabelas do schema e o seed aplicado.
@@ -174,13 +174,13 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
         [
           'artigos',
           'categorias',
+          'consumo_itens',
+          'consumos',
           'movimentos_caixa',
           'movimentos_stock',
           'sessoes_caixa',
           'stocks',
-          'utilizadores',
-          'venda_itens',
-          'vendas'
+          'utilizadores'
         ]
       );
 
@@ -196,7 +196,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(contagens.stocks, 24);
     });
 
-    // --- 1. Login (password) e login por PIN no POS -------------------------
+    // --- 1. Login (password) e login por PIN no GIM -------------------------
     const agente = request.agent(app);
 
     await t.test('1a. Login com o utilizador do seed cria sessao', async () => {
@@ -206,29 +206,29 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
         .send({ username: ADMIN.username, password: ADMIN.password });
 
       assert.equal(res.status, 302);
-      // O admin entra no backoffice; o funcionario iria para /pos (ver 1c).
+      // O admin entra no backoffice; o funcionario iria para /gim (ver 1c).
       assert.equal(res.headers.location, '/admin');
 
-      // A sessao esta mesmo activa: o POS responde sem redirecionar para /login.
-      const pos = await agente.get('/pos');
-      assert.equal(pos.status, 200);
+      // A sessao esta mesmo activa: o GIM responde sem redirecionar para /login.
+      const gim = await agente.get('/gim');
+      assert.equal(gim.status, 200);
     });
 
-    await t.test('1b. Login por PIN no POS autentica o mesmo utilizador', async () => {
+    await t.test('1b. Login por PIN no GIM autentica o mesmo utilizador', async () => {
       const agentePin = request.agent(app);
-      const res = await agentePin.post('/pos/pin').type('form').send({ pin: ADMIN.pin });
+      const res = await agentePin.post('/gim/pin').type('form').send({ pin: ADMIN.pin });
 
       assert.equal(res.status, 302);
-      assert.equal(res.headers.location, '/pos');
+      assert.equal(res.headers.location, '/gim');
 
-      const catalogo = await agentePin.get('/api/pos/artigos');
+      const catalogo = await agentePin.get('/api/gim/artigos');
       assert.equal(catalogo.status, 200);
       assert.equal(catalogo.body.categorias.length, 6);
       assert.equal(catalogo.body.artigos.length, 24);
 
       // PIN errado nao autentica: volta ao /login com aviso e sem sessao.
       const agenteMau = request.agent(app);
-      const mau = await agenteMau.post('/pos/pin').type('form').send({ pin: '9999' });
+      const mau = await agenteMau.post('/gim/pin').type('form').send({ pin: '9999' });
       assert.equal(mau.status, 302);
       assert.equal(mau.headers.location, '/login');
 
@@ -236,8 +236,8 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(paginaLogin.status, 200);
       assert.ok(paginaLogin.text.includes('PIN invalido.'), 'a pagina devia mostrar o aviso de PIN invalido');
 
-      // E continua sem acesso ao POS.
-      const bloqueado = await agenteMau.get('/api/pos/artigos');
+      // E continua sem acesso ao GIM.
+      const bloqueado = await agenteMau.get('/api/gim/artigos');
       assert.equal(bloqueado.status, 401);
     });
 
@@ -253,8 +253,8 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       sessaoCaixaId = sessao.id;
     });
 
-    // --- 3. Venda com varios artigos ---------------------------------------
-    await t.test('3. POST /api/vendas desconta stock e grava tudo corretamente', async () => {
+    // --- 3. Consumo com varios artigos ---------------------------------------
+    await t.test('3. POST /api/consumos desconta stock e grava tudo corretamente', async () => {
       const cafe = await artigoPorNome('Cafe'); // 0.70, stock 200
       const imperial = await artigoPorNome('Imperial'); // 1.20, stock 150
       assert.equal(cafe.preco, 0.7);
@@ -264,7 +264,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
 
       // 3 x 0.70 = 2.10 ; 2 x 1.20 = 2.40 ; total = 4.50 (sem IVA)
       // Cliente entrega 5.00 -> troco 0.50
-      const res = await agente.post('/api/vendas').send({
+      const res = await agente.post('/api/consumos').send({
         itens: [
           { artigo_id: cafe.id, quantidade: 3 },
           { artigo_id: imperial.id, quantidade: 2 }
@@ -274,45 +274,45 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       });
 
       assert.equal(res.status, 201);
-      assert.equal(res.body.venda.total, 4.5);
-      assert.equal(res.body.venda.troco, 0.5);
-      assert.equal(res.body.venda.valor_dinheiro, 5);
-      assert.equal(res.body.venda.valor_multibanco, 0);
+      assert.equal(res.body.consumo.total, 4.5);
+      assert.equal(res.body.consumo.troco, 0.5);
+      assert.equal(res.body.consumo.valor_dinheiro, 5);
+      assert.equal(res.body.consumo.valor_multibanco, 0);
       assert.deepEqual(res.body.avisos, []);
 
-      vendaAnulavel = res.body.venda;
+      consumoAnulavel = res.body.consumo;
 
       // Stock decrementado EXATAMENTE.
       assert.equal((await artigoPorNome('Cafe')).quantidade, 197);
       assert.equal((await artigoPorNome('Imperial')).quantidade, 148);
 
-      // Movimentos de stock do tipo 'venda' com quantidade_apos correto.
+      // Movimentos de stock do tipo 'consumo' com quantidade_apos correto.
       const movCafe = await uma(
-        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'consumo' ORDER BY id DESC LIMIT 1",
         [cafe.id]
       );
       assert.equal(movCafe.quantidade, 3);
       assert.equal(movCafe.quantidade_apos, 197);
-      assert.equal(movCafe.motivo, `Movimento #${vendaAnulavel.numero}`);
+      assert.equal(movCafe.motivo, `Movimento #${consumoAnulavel.numero}`);
 
       const movImperial = await uma(
-        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'consumo' ORDER BY id DESC LIMIT 1",
         [imperial.id]
       );
       assert.equal(movImperial.quantidade, 2);
       assert.equal(movImperial.quantidade_apos, 148);
 
-      // Cabecalho da venda gravado e associado a sessao de caixa aberta.
-      const venda = await uma('SELECT * FROM vendas WHERE id = ?', [vendaAnulavel.id]);
-      assert.equal(venda.total, 4.5);
-      assert.equal(venda.troco, 0.5);
-      assert.equal(venda.estado, 'concluida');
-      assert.equal(venda.metodo_pagamento, 'dinheiro');
-      assert.equal(venda.sessao_caixa_id, sessaoCaixaId);
+      // Cabecalho do consumo gravado e associado a sessao de caixa aberta.
+      const consumo = await uma('SELECT * FROM consumos WHERE id = ?', [consumoAnulavel.id]);
+      assert.equal(consumo.total, 4.5);
+      assert.equal(consumo.troco, 0.5);
+      assert.equal(consumo.estado, 'concluida');
+      assert.equal(consumo.metodo_pagamento, 'dinheiro');
+      assert.equal(consumo.sessao_caixa_id, sessaoCaixaId);
 
       // Itens com snapshot de nome e preco unitario.
-      const itens = await bd.query('SELECT * FROM venda_itens WHERE venda_id = ? ORDER BY id', [
-        vendaAnulavel.id
+      const itens = await bd.query('SELECT * FROM consumo_itens WHERE consumo_id = ? ORDER BY id', [
+        consumoAnulavel.id
       ]);
       assert.equal(itens.length, 2);
       assert.equal(itens[0].nome_snapshot, 'Cafe');
@@ -325,32 +325,32 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
     });
 
     // --- 4. Stock negativo: avisa, nunca bloqueia ---------------------------
-    await t.test('4. Venda acima do stock nao e bloqueada e devolve avisos', async () => {
+    await t.test('4. Consumo acima do stock nao e bloqueado e devolve avisos', async () => {
       const gelado = await artigoPorNome('Gelado premium'); // 2.50, stock 20
       assert.equal(gelado.quantidade, 20);
 
-      // 25 unidades com apenas 20 em stock -> -5, mas a venda tem de passar.
-      const res = await agente.post('/api/vendas').send({
+      // 25 unidades com apenas 20 em stock -> -5, mas o consumo tem de passar.
+      const res = await agente.post('/api/consumos').send({
         itens: [{ artigo_id: gelado.id, quantidade: 25 }],
         metodo_pagamento: 'multibanco'
       });
 
-      assert.equal(res.status, 201, 'a venda nunca pode ser bloqueada por falta de stock');
-      assert.equal(res.body.venda.total, 62.5);
-      assert.equal(res.body.venda.valor_multibanco, 62.5);
-      assert.equal(res.body.venda.valor_dinheiro, 0);
-      assert.equal(res.body.venda.troco, 0, 'nao ha troco em multibanco');
+      assert.equal(res.status, 201, 'o consumo nunca pode ser bloqueado por falta de stock');
+      assert.equal(res.body.consumo.total, 62.5);
+      assert.equal(res.body.consumo.valor_multibanco, 62.5);
+      assert.equal(res.body.consumo.valor_dinheiro, 0);
+      assert.equal(res.body.consumo.troco, 0, 'nao ha troco em multibanco');
 
       assert.ok(Array.isArray(res.body.avisos) && res.body.avisos.length === 1, 'devia trazer 1 aviso');
       assert.match(res.body.avisos[0], /Gelado premium/);
       assert.match(res.body.avisos[0], /negativo/i);
 
-      vendaMultibanco = res.body.venda;
+      consumoMultibanco = res.body.consumo;
 
       // O stock ficou mesmo negativo e o movimento foi registado.
       assert.equal((await artigoPorNome('Gelado premium')).quantidade, -5);
       const mov = await uma(
-        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'venda' ORDER BY id DESC LIMIT 1",
+        "SELECT * FROM movimentos_stock WHERE artigo_id = ? AND tipo = 'consumo' ORDER BY id DESC LIMIT 1",
         [gelado.id]
       );
       assert.equal(mov.quantidade_apos, -5);
@@ -361,42 +361,41 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       const cola = await artigoPorNome('Coca-Cola'); // 1.50
       assert.equal(cola.preco, 1.5);
 
-      const res = await agente.post('/api/vendas').send({
+      const res = await agente.post('/api/consumos').send({
         itens: [{ artigo_id: cola.id, quantidade: 2, preco: 0.01, preco_unit: 0.01, subtotal: 0.02 }],
         metodo_pagamento: 'dinheiro'
       });
 
       assert.equal(res.status, 201);
       // 2 x 1.50 = 3.00 (preco da BD), nunca 2 x 0.01 = 0.02.
-      assert.equal(res.body.venda.total, 3);
-      assert.equal(res.body.venda.troco, 0);
+      assert.equal(res.body.consumo.total, 3);
+      assert.equal(res.body.consumo.troco, 0);
 
-      vendaDinheiro = res.body.venda;
+      consumoDinheiro = res.body.consumo;
 
-      const item = await uma('SELECT * FROM venda_itens WHERE venda_id = ?', [vendaDinheiro.id]);
+      const item = await uma('SELECT * FROM consumo_itens WHERE consumo_id = ?', [consumoDinheiro.id]);
       assert.equal(item.preco_unit, 1.5, 'o preco gravado tem de ser o da BD');
       assert.equal(item.subtotal, 3);
     });
 
-    // --- 6. Talao ----------------------------------------------------------
-    await t.test('6. GET /pos/venda/:id/talao renderiza o talao com o total', async () => {
-      const res = await agente.get(`/pos/venda/${vendaAnulavel.id}/talao`);
+    // --- 6. Sem comprovativo -----------------------------------------------
+    // A aplicacao e de controlo INTERNO: nao emite talao nem comprovativo.
+    // A rota antiga tem de estar mesmo morta (404), nao apenas escondida.
+    await t.test('6. GET /gim/consumo/:id/talao ja nao existe (404)', async () => {
+      const res = await agente.get(`/gim/consumo/${consumoAnulavel.id}/talao`);
 
-      assert.equal(res.status, 200);
-      assert.match(res.headers['content-type'], /html/);
-      assert.ok(res.text.includes('4.50'), 'o talao tem de mostrar o total 4.50');
-      assert.ok(res.text.includes(`#${vendaAnulavel.numero}`), 'o talao tem de mostrar o numero da venda');
-      assert.ok(res.text.includes('Cafe'));
-      assert.ok(res.text.includes('Imperial'));
+      assert.equal(res.status, 404, 'a rota do talao tem de estar removida');
+      assert.ok(!res.text.includes('bi-printer'), 'nao pode sobrar botao de imprimir');
+      assert.ok(!res.text.includes('Comprovativo'), 'nao pode sobrar a palavra Comprovativo');
     });
 
-    // --- 7. Anulacao de venda ----------------------------------------------
-    await t.test('7. Anular venda repoe o stock e marca a venda como anulada', async () => {
-      const res = await agente.post(`/admin/vendas/${vendaAnulavel.id}/anular`).type('form').send({});
+    // --- 7. Anulacao de consumo ----------------------------------------------
+    await t.test('7. Anular consumo repoe o stock e marca o consumo como anulado', async () => {
+      const res = await agente.post(`/admin/consumos/${consumoAnulavel.id}/anular`).type('form').send({});
       assert.equal(res.status, 302);
 
-      const venda = await uma('SELECT * FROM vendas WHERE id = ?', [vendaAnulavel.id]);
-      assert.equal(venda.estado, 'anulada');
+      const consumo = await uma('SELECT * FROM consumos WHERE id = ?', [consumoAnulavel.id]);
+      assert.equal(consumo.estado, 'anulada');
 
       // Stock reposto exatamente aos valores originais do seed.
       assert.equal((await artigoPorNome('Cafe')).quantidade, 200);
@@ -410,11 +409,11 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       );
       assert.equal(mov.quantidade, 3);
       assert.equal(mov.quantidade_apos, 200);
-      assert.equal(mov.motivo, `Anulacao do movimento #${vendaAnulavel.numero}`);
+      assert.equal(mov.motivo, `Anulacao do movimento #${consumoAnulavel.numero}`);
 
       // Anular duas vezes e conflito.
       const repetida = await agente
-        .post(`/admin/vendas/${vendaAnulavel.id}/anular`)
+        .post(`/admin/consumos/${consumoAnulavel.id}/anular`)
         .set('Accept', 'application/json')
         .send({});
       assert.equal(repetida.status, 409);
@@ -441,18 +440,18 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(movimentos[1].tipo, 'sangria');
       assert.equal(movimentos[1].valor, 20);
 
-      // Vendas concluidas na sessao: a de multibanco (62.50) e a de dinheiro (3.00).
-      // A primeira venda (4.50) foi anulada e NAO conta.
+      // Consumos concluidos na sessao: o de multibanco (62.50) e o de dinheiro (3.00).
+      // O primeiro consumo (4.50) foi anulado e NAO conta.
       const estado = await caixaService.estadoAtual();
-      assert.equal(estado.resumo.n_vendas, 2);
-      assert.equal(estado.resumo.vendas_dinheiro, 3);
-      assert.equal(estado.resumo.vendas_multibanco, 62.5);
+      assert.equal(estado.resumo.n_consumos, 2);
+      assert.equal(estado.resumo.consumos_dinheiro, 3);
+      assert.equal(estado.resumo.consumos_multibanco, 62.5);
       assert.equal(estado.resumo.fundo_inicial, 50);
       assert.equal(estado.resumo.entradas, 10);
       assert.equal(estado.resumo.saidas, 0);
       assert.equal(estado.resumo.sangrias, 20);
 
-      // esperado = 50 (fundo) + 3.00 (vendas em dinheiro) + 10 (entradas) - 20 (sangria) = 43.00
+      // esperado = 50 (fundo) + 3.00 (consumos em dinheiro) + 10 (entradas) - 20 (sangria) = 43.00
       // Nao ha movimentos internos nesta sessao, logo o agregado `interno` e 0.
       // Os 62.50 de multibanco NAO entram no dinheiro fisico em caixa.
       assert.equal(estado.resumo.movimentos_internos, 0);
@@ -519,16 +518,16 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
     await t.test('10. Relatorios batem certo com os numeros conferidos a mao', async () => {
       const hoje = require('../../src/utils').hojeISO();
 
-      // Vendas concluidas de hoje: 62.50 (multibanco) + 3.00 (dinheiro) = 65.50.
-      // A venda de 4.50 esta anulada e nao conta em lado nenhum.
-      const resumo = await relatoriosRepo.resumoVendas(hoje, hoje);
-      assert.equal(resumo.n_vendas, 2);
+      // Consumos concluidos de hoje: 62.50 (multibanco) + 3.00 (dinheiro) = 65.50.
+      // O consumo de 4.50 esta anulada e nao conta em lado nenhum.
+      const resumo = await relatoriosRepo.resumoConsumos(hoje, hoje);
+      assert.equal(resumo.n_consumos, 2);
       assert.equal(resumo.total, 65.5);
       assert.equal(resumo.dinheiro, 3);
       assert.equal(resumo.multibanco, 62.5);
       assert.equal(resumo.ticket_medio, 32.75); // 65.50 / 2
 
-      // Top artigos: 25 x Gelado premium, 2 x Coca-Cola. Nada da venda anulada.
+      // Top artigos: 25 x Gelado premium, 2 x Coca-Cola. Nada do consumo anulado.
       const top = await relatoriosRepo.topArtigos(hoje, hoje, 10);
       assert.equal(top.length, 2);
       assert.equal(top[0].nome, 'Gelado premium');
@@ -537,7 +536,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(top[1].nome, 'Coca-Cola');
       assert.equal(Number(top[1].quantidade), 2);
       assert.equal(Number(top[1].total), 3);
-      assert.ok(!top.some((a) => a.nome === 'Cafe'), 'a venda anulada nao pode aparecer no top');
+      assert.ok(!top.some((a) => a.nome === 'Cafe'), 'o consumo anulado nao pode aparecer no top');
 
       // Stock baixo: so o Gelado premium (-5 <= 5). Todos os outros estao acima do minimo.
       const stocksRepo = require('../../src/repositories/stocks.repo');
@@ -546,8 +545,8 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(baixo[0].artigo_nome, 'Gelado premium');
       assert.equal(Number(baixo[0].quantidade), -5);
 
-      // Vendas por categoria: Gelados 62.50 e Bebidas 3.00.
-      const porCategoria = await relatoriosRepo.vendasPorCategoria(hoje, hoje);
+      // Consumos por categoria: Gelados 62.50 e Bebidas 3.00.
+      const porCategoria = await relatoriosRepo.consumosPorCategoria(hoje, hoje);
       const mapa = new Map(porCategoria.map((c) => [c.categoria, Number(c.total)]));
       assert.equal(mapa.get('Gelados'), 62.5);
       assert.equal(mapa.get('Bebidas'), 3);
@@ -559,7 +558,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       const funcionarioBd = await uma('SELECT id, role FROM utilizadores WHERE username = ?', [
         FUNCIONARIO.username
       ]);
-      assert.ok(funcionarioBd, 'o seed devia ter criado o utilizador de venda');
+      assert.ok(funcionarioBd, 'o seed devia ter criado o utilizador de consumo');
       assert.equal(funcionarioBd.role, 'funcionario');
 
       // O responsavel abre a caixa (a anterior foi fechada no passo 8).
@@ -568,14 +567,14 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       const sessaoNova = await uma("SELECT id FROM sessoes_caixa WHERE estado = 'aberta'");
       assert.ok(sessaoNova, 'o admin devia ter aberto uma nova sessao de caixa');
 
-      // O funcionario entra e cai no POS (nunca no backoffice).
+      // O funcionario entra e cai no GIM (nunca no backoffice).
       const balcao = request.agent(app);
       const login = await balcao
         .post('/login')
         .type('form')
         .send({ username: FUNCIONARIO.username, password: FUNCIONARIO.password });
       assert.equal(login.status, 302);
-      assert.equal(login.headers.location, '/pos');
+      assert.equal(login.headers.location, '/gim');
 
       // Gestao e caixa estao vedadas -- 403, nao redirect para /login.
       for (const rota of ['/admin', '/admin/artigos', '/admin/relatorios', '/caixa']) {
@@ -588,25 +587,25 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
         .send({ tipo: 'sangria', valor: '10.00', descricao: 'tentativa' });
       assert.equal(sangria.status, 403);
 
-      // Mas o POS funciona: catalogo + venda associada a caixa aberta pelo admin.
-      const catalogo = await balcao.get('/api/pos/artigos');
+      // Mas o GIM funciona: catalogo + consumo associada a caixa aberta pelo admin.
+      const catalogo = await balcao.get('/api/gim/artigos');
       assert.equal(catalogo.status, 200);
 
       const agua = await artigoPorNome('Agua 0.5L'); // 0.80
       const stockAntes = Number(agua.quantidade);
 
-      const venda = await balcao.post('/api/vendas').send({
+      const consumo = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: agua.id, quantidade: 2 }],
         metodo_pagamento: 'dinheiro',
         valor_dinheiro: 2
       });
 
-      assert.equal(venda.status, 201);
-      assert.equal(venda.body.venda.total, 1.6);
-      assert.equal(venda.body.venda.troco, 0.4);
+      assert.equal(consumo.status, 201);
+      assert.equal(consumo.body.consumo.total, 1.6);
+      assert.equal(consumo.body.consumo.troco, 0.4);
 
       // Gravada em nome do funcionario e no turno aberto pelo admin.
-      const gravada = await uma('SELECT * FROM vendas WHERE id = ?', [venda.body.venda.id]);
+      const gravada = await uma('SELECT * FROM consumos WHERE id = ?', [consumo.body.consumo.id]);
       assert.equal(gravada.utilizador_id, funcionarioBd.id);
       assert.equal(gravada.sessao_caixa_id, sessaoNova.id);
       assert.equal(gravada.estado, 'concluida');
@@ -619,10 +618,10 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(fecho.status, 302);
     });
 
-    // --- 12. Alerta de stock baixo no POS -----------------------------------
+    // --- 12. Alerta de stock baixo no GIM -----------------------------------
     // ACRESCENTADO NO FIM de proposito: os totais dos passos anteriores estao
-    // verificados a mao e nao podem ser invalidados por vendas extra.
-    await t.test('12. POS sinaliza stock baixo no catalogo e avisa ao concluir a venda', async () => {
+    // verificados a mao e nao podem ser invalidados por consumos extra.
+    await t.test('12. GIM sinaliza stock baixo no catalogo e avisa ao concluir o consumo', async () => {
       const balcao = request.agent(app);
       const login = await balcao
         .post('/login')
@@ -631,13 +630,13 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(login.status, 302);
 
       // Given: Tremocos tem minimo 8 no seed. Coloca-se o stock em 10 (acima
-      // do minimo) para que seja a VENDA a empurra-lo para baixo do minimo.
+      // do minimo) para que seja o CONSUMO a empurra-lo para baixo do minimo.
       const tremocos = await artigoPorNome('Tremocos');
       assert.equal(Number(tremocos.stock_minimo), 8);
       await bd.query('UPDATE stocks SET quantidade = 10 WHERE artigo_id = ?', [tremocos.id]);
 
       // O catalogo expoe o minimo e ainda nao ha alerta.
-      const antes = await balcao.get('/api/pos/artigos');
+      const antes = await balcao.get('/api/gim/artigos');
       assert.equal(antes.status, 200);
       const artigoAntes = antes.body.artigos.find((a) => a.nome === 'Tremocos');
       assert.equal(artigoAntes.stock, 10);
@@ -645,28 +644,28 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(artigoAntes.stock_baixo, false);
 
       // When: vende 3 -> fica com 7, abaixo do minimo de 8.
-      const venda = await balcao.post('/api/vendas').send({
+      const consumo = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: tremocos.id, quantidade: 3 }],
         metodo_pagamento: 'multibanco'
       });
 
-      // Then: a venda passa e traz um aviso classificado como stock_baixo.
-      assert.equal(venda.status, 201, 'o alerta de stock nunca pode bloquear a venda');
-      assert.equal(venda.body.venda.total, 4.5); // 3 x 1.50
-      assert.equal(venda.body.avisos_stock.length, 1);
-      assert.equal(venda.body.avisos_stock[0].tipo, 'stock_baixo');
-      assert.equal(venda.body.avisos_stock[0].artigo, 'Tremocos');
-      assert.equal(venda.body.avisos_stock[0].quantidade, 7);
-      assert.equal(venda.body.avisos_stock[0].stock_minimo, 8);
-      assert.match(venda.body.avisos[0], /Tremocos/);
+      // Then: o consumo passa e traz um aviso classificado como stock_baixo.
+      assert.equal(consumo.status, 201, 'o alerta de stock nunca pode bloquear o consumo');
+      assert.equal(consumo.body.consumo.total, 4.5); // 3 x 1.50
+      assert.equal(consumo.body.avisos_stock.length, 1);
+      assert.equal(consumo.body.avisos_stock[0].tipo, 'stock_baixo');
+      assert.equal(consumo.body.avisos_stock[0].artigo, 'Tremocos');
+      assert.equal(consumo.body.avisos_stock[0].quantidade, 7);
+      assert.equal(consumo.body.avisos_stock[0].stock_minimo, 8);
+      assert.match(consumo.body.avisos[0], /Tremocos/);
 
-      // E o catalogo passa a sinalizar o artigo (o POS refresca apos a venda).
-      const depois = await balcao.get('/api/pos/artigos');
+      // E o catalogo passa a sinalizar o artigo (o GIM refresca apos o consumo).
+      const depois = await balcao.get('/api/gim/artigos');
       const artigoDepois = depois.body.artigos.find((a) => a.nome === 'Tremocos');
       assert.equal(artigoDepois.stock, 7);
       assert.equal(artigoDepois.stock_baixo, true);
 
-      // A regra do POS e a MESMA do backoffice: o artigo aparece nos alertas
+      // A regra do GIM e a MESMA do backoffice: o artigo aparece nos alertas
       // de /admin/stocks (que consulta quantidade <= stock_minimo na BD).
       const emFalta = await bd.query(
         'SELECT a.nome FROM stocks s JOIN artigos a ON a.id = s.artigo_id WHERE a.ativo = 1 AND s.quantidade <= s.stock_minimo'
@@ -676,7 +675,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
         'o backoffice tem de considerar o mesmo artigo em falta'
       );
 
-      // O funcionario continua sem acesso a gestao (o painel de alertas do POS
+      // O funcionario continua sem acesso a gestao (o painel de alertas do GIM
       // nao lhe da nenhum atalho para la).
       const gestao = await balcao.get('/admin/stocks');
       assert.equal(gestao.status, 403);
@@ -699,18 +698,18 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       const stockAntes = Number(agua.quantidade);
 
       // When: o funcionario regista um movimento SEM metodo de pagamento.
-      const mov = await balcao.post('/api/vendas').send({
+      const mov = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: agua.id, quantidade: 3 }]
       });
 
       // Then: registado como interno, com total, sem dinheiro e sem troco.
       assert.equal(mov.status, 201, 'o registo nao pode exigir caixa aberta');
-      assert.equal(mov.body.venda.total, 2.4); // 3 x 0.80
-      assert.equal(mov.body.venda.metodo_pagamento, 'interno');
-      assert.equal(mov.body.venda.valor_dinheiro, 0);
-      assert.equal(mov.body.venda.troco, 0);
+      assert.equal(mov.body.consumo.total, 2.4); // 3 x 0.80
+      assert.equal(mov.body.consumo.metodo_pagamento, 'interno');
+      assert.equal(mov.body.consumo.valor_dinheiro, 0);
+      assert.equal(mov.body.consumo.troco, 0);
 
-      const gravado = await uma('SELECT * FROM vendas WHERE id = ?', [mov.body.venda.id]);
+      const gravado = await uma('SELECT * FROM consumos WHERE id = ?', [mov.body.consumo.id]);
       assert.equal(gravado.metodo_pagamento, 'interno');
       assert.equal(Number(gravado.valor_dinheiro), 0);
       assert.equal(Number(gravado.valor_multibanco), 0);
@@ -721,20 +720,17 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       // O stock e descontado tal como antes.
       assert.equal(Number((await artigoPorNome('Agua 0.5L')).quantidade), stockAntes - 3);
 
-      // O comprovativo abre e nao fala de dinheiro.
-      const talao = await balcao.get(`/pos/venda/${mov.body.venda.id}/talao`);
-      assert.equal(talao.status, 200);
-      assert.doesNotMatch(talao.text, /Troco/i);
-      assert.doesNotMatch(talao.text, /Multibanco/i);
-      assert.doesNotMatch(talao.text, /Recebido/i);
+      // Nao ha comprovativo nenhum para abrir: a rota foi removida.
+      const talao = await balcao.get(`/gim/consumo/${mov.body.consumo.id}/talao`);
+      assert.equal(talao.status, 404);
 
-      // O POS avisa (sem bloquear) que nao ha caixa aberta.
-      const posSemCaixa = await balcao.get('/pos');
-      assert.equal(posSemCaixa.status, 200);
-      assert.match(posSemCaixa.text, /Nao ha caixa aberta/);
-      assert.match(posSemCaixa.text, /Avise o responsavel/);
+      // O GIM avisa (sem bloquear) que nao ha caixa aberta.
+      const gimSemCaixa = await balcao.get('/gim');
+      assert.equal(gimSemCaixa.status, 200);
+      assert.match(gimSemCaixa.text, /Nao ha caixa aberta/);
+      assert.match(gimSemCaixa.text, /Avise o responsavel/);
       assert.ok(
-        !posSemCaixa.text.includes('pos-aviso-caixa-btn'),
+        !gimSemCaixa.text.includes('gim-aviso-caixa-btn'),
         'o funcionario nao pode ter atalho para abrir caixa'
       );
 
@@ -742,7 +738,7 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       // qualquer sessao. Neste ponto ha 2 movimentos sem caixa:
       //   4.50 (Tremocos, passo 12) + 2.40 (agua, agora) = 6.90
       const semSessao = await uma(
-        "SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS total FROM vendas WHERE sessao_caixa_id IS NULL AND estado = 'concluida'"
+        "SELECT COUNT(*) AS n, COALESCE(SUM(total), 0) AS total FROM consumos WHERE sessao_caixa_id IS NULL AND estado = 'concluida'"
       );
       assert.equal(Number(semSessao.n), 2);
       assert.equal(Number(semSessao.total), 6.9);
@@ -757,28 +753,28 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       const abertura = await agente.post('/caixa/abrir').type('form').send({ fundo_inicial: '30.00' });
       assert.equal(abertura.status, 302);
 
-      const movComCaixa = await balcao.post('/api/vendas').send({
+      const movComCaixa = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: agua.id, quantidade: 5 }] // 5 x 0.80 = 4.00
       });
       assert.equal(movComCaixa.status, 201);
-      assert.equal(movComCaixa.body.venda.total, 4);
+      assert.equal(movComCaixa.body.consumo.total, 4);
 
       // esperado = 30 (fundo) + 4.00 (movimentos internos) = 34.00
       let estado = await caixaService.estadoAtual();
       assert.equal(estado.resumo.movimentos_internos, 4);
-      assert.equal(estado.resumo.vendas_dinheiro, 0);
-      assert.equal(estado.resumo.vendas_multibanco, 0);
+      assert.equal(estado.resumo.consumos_dinheiro, 0);
+      assert.equal(estado.resumo.consumos_multibanco, 0);
       assert.equal(estado.resumo.esperado, 34);
 
       // Um movimento ANULADO nao pode contar para o esperado.
-      const anulavel = await balcao.post('/api/vendas').send({
+      const anulavel = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: agua.id, quantidade: 2 }] // 1.60
       });
       assert.equal(anulavel.status, 201);
       estado = await caixaService.estadoAtual();
       assert.equal(estado.resumo.esperado, 35.6, '34.00 + 1.60 enquanto esta concluido');
 
-      const anulacao = await agente.post(`/admin/vendas/${anulavel.body.venda.id}/anular`).type('form').send({});
+      const anulacao = await agente.post(`/admin/consumos/${anulavel.body.consumo.id}/anular`).type('form').send({});
       assert.equal(anulacao.status, 302);
       estado = await caixaService.estadoAtual();
       assert.equal(estado.resumo.movimentos_internos, 4, 'o movimento anulado sai do agregado');
@@ -835,18 +831,18 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal(Number(imperial.preco), 1.2);
       assert.equal(Number(agua.preco), 0.8);
 
-      const um = await balcao.post('/api/vendas').send({
+      const um = await balcao.post('/api/consumos').send({
         itens: [{ artigo_id: cola.id, quantidade: 2 }]
       });
-      assert.equal(um.body.venda.total, 3);
+      assert.equal(um.body.consumo.total, 3);
 
-      const dois = await balcao.post('/api/vendas').send({
+      const dois = await balcao.post('/api/consumos').send({
         itens: [
           { artigo_id: imperial.id, quantidade: 1 },
           { artigo_id: agua.id, quantidade: 1 }
         ]
       });
-      assert.equal(dois.body.venda.total, 2);
+      assert.equal(dois.body.consumo.total, 2);
 
       // Then: 20 + 5 = 25 (era 20 antes da correcao — o bug relatado).
       const estado = await caixaService.estadoAtual();
@@ -866,8 +862,8 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
 
     // --- 14. Backoffice: listagem sem coluna de metodo de pagamento ---------
     // Read-only: nao cria registos, logo nao invalida nenhum total acima.
-    await t.test('14. /admin/vendas mostra "Movimentos Internos" e ja nao tem coluna Tipo', async () => {
-      const res = await agente.get('/admin/vendas');
+    await t.test('14. /admin/consumos mostra "Movimentos Internos" e ja nao tem coluna Tipo', async () => {
+      const res = await agente.get('/admin/consumos');
       assert.equal(res.status, 200);
 
       // A area passou a chamar-se Movimentos Internos (titulo + menu).
@@ -886,24 +882,210 @@ test('E2E: fluxo completo do bar contra MariaDB real', async (t) => {
       assert.equal((cabecalho[0].match(/<th[\s>]/g) || []).length, 7);
 
       // O dado nao desapareceu: continua no detalhe de um registo com pagamento.
-      const antiga = await uma("SELECT id FROM vendas WHERE metodo_pagamento = 'multibanco' LIMIT 1");
+      const antiga = await uma("SELECT id FROM consumos WHERE metodo_pagamento = 'multibanco' LIMIT 1");
       assert.ok(antiga, 'o seed do fluxo devia ter deixado uma venda antiga por multibanco');
-      const detalhe = await agente.get(`/admin/vendas/${antiga.id}`);
+      const detalhe = await agente.get(`/admin/consumos/${antiga.id}`);
       assert.equal(detalhe.status, 200);
       assert.match(detalhe.text, /multibanco/);
 
       // Um movimento interno mostra o rotulo proprio, sem valores de dinheiro.
-      const interna = await uma("SELECT id FROM vendas WHERE metodo_pagamento = 'interno' LIMIT 1");
-      const detalheInterno = await agente.get(`/admin/vendas/${interna.id}`);
+      const interna = await uma("SELECT id FROM consumos WHERE metodo_pagamento = 'interno' LIMIT 1");
+      const detalheInterno = await agente.get(`/admin/consumos/${interna.id}`);
       assert.equal(detalheInterno.status, 200);
       assert.match(detalheInterno.text, /movimento interno/);
       assert.doesNotMatch(detalheInterno.text, /Troco/);
 
       // O parametro ?metodo= continua a funcionar (URLs guardadas) e agora e
       // sinalizado ao utilizador, para nao filtrar em silencio.
-      const filtrada = await agente.get('/admin/vendas?metodo=multibanco');
+      const filtrada = await agente.get('/admin/consumos?metodo=multibanco');
       assert.equal(filtrada.status, 200);
       assert.match(filtrada.text, /A mostrar apenas os registos com pagamento/);
+    });
+
+    // --- 15. Preco de custo, snapshot e margem ------------------------------
+    // Passos novos ficam sempre NO FIM: os totais dos passos anteriores estao
+    // conferidos a mao e qualquer registo novo pelo meio invalidava-os.
+    let artigoCusto = null;
+    let consumoComCusto = null;
+
+    await t.test('15a. O seed traz preco_custo em todos os artigos', async () => {
+      const colunas = await bd.query('SHOW COLUMNS FROM artigos LIKE ?', ['preco_custo']);
+      assert.equal(colunas.length, 1, 'artigos.preco_custo tem de existir');
+
+      const itens = await bd.query('SHOW COLUMNS FROM consumo_itens LIKE ?', ['custo_unit']);
+      assert.equal(itens.length, 1, 'consumo_itens.custo_unit tem de existir');
+
+      // Custos concretos do seed (bar de campo: custo entre ~30% e ~47%).
+      const imperial = await uma('SELECT preco, preco_custo FROM artigos WHERE nome = ?', ['Imperial']);
+      assert.equal(Number(imperial.preco), 1.2);
+      assert.equal(Number(imperial.preco_custo), 0.4);
+
+      const cafe = await uma('SELECT preco, preco_custo FROM artigos WHERE nome = ?', ['Cafe']);
+      assert.equal(Number(cafe.preco_custo), 0.22);
+
+      // Nenhum artigo do seed ficou sem custo nem com custo acima do preco.
+      const maus = await bd.query(
+        "SELECT nome FROM artigos WHERE nome <> 'Bolo caseiro' AND preco > 0 AND (preco_custo <= 0 OR preco_custo >= preco)"
+      );
+      assert.deepEqual(maus.map((m) => m.nome), []);
+    });
+
+    await t.test('15b. O custo_unit e gravado no consumo a partir da BD, nao do cliente', async () => {
+      artigoCusto = await artigoPorNome('Cerveja garrafa 33cl'); // 1.50 / custo 0.60
+
+      // O cliente tenta impor preco E custo: ambos tem de ser ignorados.
+      const res = await agente.post('/api/consumos').send({
+        itens: [
+          { artigo_id: artigoCusto.id, quantidade: 4, preco_unit: 0.01, custo_unit: 0.01, subtotal: 0.04 }
+        ]
+      });
+
+      assert.equal(res.status, 201);
+      assert.equal(res.body.consumo.total, 6); // 4 x 1.50, o preco da BD
+      consumoComCusto = res.body.consumo;
+
+      const item = await uma('SELECT * FROM consumo_itens WHERE consumo_id = ?', [consumoComCusto.id]);
+      assert.equal(Number(item.preco_unit), 1.5);
+      assert.equal(Number(item.custo_unit), 0.6, 'o custo gravado tem de ser o da BD');
+      assert.equal(Number(item.subtotal), 6);
+
+      // Margem desta linha: (1.50 - 0.60) x 4 = 3.60
+      assert.equal(Number(item.subtotal) - Number(item.custo_unit) * Number(item.quantidade), 3.6);
+    });
+
+    await t.test('15c. Alterar o preco_custo do artigo NAO muda a margem ja registada', async () => {
+      // Given: o custo do artigo sobe de 0.60 para 0.95, escrito com VIRGULA
+      // no formulario do backoffice (formato pt-PT).
+      const res = await agente
+        .post(`/admin/artigos/${artigoCusto.id}`)
+        .field('nome', 'Cerveja garrafa 33cl')
+        .field('preco', '1.50')
+        .field('preco_custo', '0,95')
+        .field('ativo', 'on')
+        .field('stock_minimo', '24')
+        .field('unidade', 'un');
+
+      assert.equal(res.status, 302);
+
+      // O artigo passou mesmo a 0.95 (a virgula foi aceite).
+      const artigo = await uma('SELECT preco, preco_custo FROM artigos WHERE id = ?', [artigoCusto.id]);
+      assert.equal(Number(artigo.preco_custo), 0.95);
+
+      // Then: o consumo ANTERIOR continua com o custo de 0.60.
+      const item = await uma('SELECT * FROM consumo_itens WHERE consumo_id = ?', [consumoComCusto.id]);
+      assert.equal(Number(item.custo_unit), 0.6, 'o historico nao pode ser reescrito');
+
+      // E um consumo NOVO ja usa o custo novo.
+      const novo = await agente
+        .post('/api/consumos')
+        .send({ itens: [{ artigo_id: artigoCusto.id, quantidade: 1 }] });
+      assert.equal(novo.status, 201);
+
+      const itemNovo = await uma('SELECT * FROM consumo_itens WHERE consumo_id = ?', [
+        novo.body.consumo.id
+      ]);
+      assert.equal(Number(itemNovo.custo_unit), 0.95);
+    });
+
+    await t.test('15d. Relatorios: custo e margem batem certo com a BD', async () => {
+      const { hojeISO, calcularMargem } = require('../../src/utils');
+      const hoje = hojeISO();
+
+      const custos = await relatoriosRepo.custoConsumos(hoje, hoje);
+      const controlo = await uma(
+        `SELECT COALESCE(SUM(vi.custo_unit * vi.quantidade), 0) AS custo,
+                COALESCE(SUM(vi.subtotal), 0) AS venda
+         FROM consumo_itens vi
+         JOIN consumos v ON v.id = vi.consumo_id
+         WHERE v.estado = 'concluida' AND v.criado_em BETWEEN ? AND ?`,
+        [`${hoje} 00:00:00`, `${hoje} 23:59:59`]
+      );
+
+      assert.equal(custos.custo, Number(controlo.custo));
+      assert.equal(custos.venda, Number(controlo.venda));
+      assert.ok(custos.custo > 0, 'os consumos de hoje ja tem custo associado');
+
+      // A margem e simplesmente venda - custo (sem IVA em lado nenhum).
+      const margem = calcularMargem(custos.venda, custos.custo);
+      assert.equal(margem.margem, Math.round((custos.venda - custos.custo) * 100) / 100);
+      assert.ok(margem.percentagem !== null && Number.isFinite(margem.percentagem));
+
+      // Margem por artigo: a cerveja do passo 15b tem o custo ANTIGO (4 x 0.60)
+      // somado ao novo (1 x 0.95) = 3.35 de custo em 5 unidades.
+      const porArtigo = await relatoriosRepo.margemPorArtigo(hoje, hoje);
+      const cerveja = porArtigo.find((a) => a.nome === 'Cerveja garrafa 33cl');
+      assert.ok(cerveja, 'a cerveja consumida devia aparecer na margem por artigo');
+      assert.equal(Number(cerveja.quantidade), 5);
+      assert.equal(Number(cerveja.total), 7.5); // 5 x 1.50
+      assert.equal(Number(cerveja.custo), 3.35); // 4 x 0.60 + 1 x 0.95
+    });
+
+    await t.test('15e. Backoffice mostra custo/margem e nunca NaN com preco 0', async () => {
+      // Given: um artigo oferecido (preco 0) — divisao por zero na margem %
+      const criado = await agente
+        .post('/admin/artigos')
+        .field('nome', 'Oferta da casa')
+        .field('preco', '0')
+        .field('preco_custo', '0,35')
+        .field('ativo', 'on')
+        .field('stock_minimo', '0')
+        .field('unidade', 'un');
+      assert.equal(criado.status, 302);
+
+      const oferta = await uma('SELECT * FROM artigos WHERE nome = ?', ['Oferta da casa']);
+      assert.equal(Number(oferta.preco), 0);
+      assert.equal(Number(oferta.preco_custo), 0.35, 'o custo com virgula foi gravado como 0.35');
+
+      // When
+      const lista = await agente.get('/admin/artigos');
+
+      // Then
+      assert.equal(lista.status, 200);
+      assert.match(lista.text, /<th[^>]*>Custo<\/th>/);
+      assert.match(lista.text, /<th[^>]*>Margem<\/th>/);
+      assert.ok(!lista.text.includes('NaN'), 'preco 0 nao pode produzir NaN na listagem');
+      assert.ok(!lista.text.includes('Infinity'), 'preco 0 nao pode produzir Infinity na listagem');
+
+      // E os relatorios continuam a responder, tambem sem NaN/Infinity.
+      const relatorios = await agente.get('/admin/relatorios');
+      assert.equal(relatorios.status, 200);
+      assert.match(relatorios.text, /Rentabilidade do periodo/);
+      assert.match(relatorios.text, /Margem por artigo/);
+      assert.ok(!relatorios.text.includes('NaN'));
+      assert.ok(!relatorios.text.includes('Infinity'));
+
+      // O GIM continua sem qualquer vestigio de custo ou margem: o ecra de
+      // registo e operado por um funcionario e a margem e informacao de gestao.
+      const catalogo = await agente.get('/api/gim/artigos');
+      assert.equal(catalogo.status, 200);
+      const qualquer = catalogo.body.artigos[0];
+      assert.ok(!('preco_custo' in qualquer), 'o catalogo do GIM nao pode expor o custo');
+      assert.ok(!('custo' in qualquer));
+      assert.ok(!('margem' in qualquer));
+    });
+
+    // --- 16. Compatibilidade das rotas antigas /pos ---------------------------
+    // Passo novo, no fim de proposito: nao mexe em nada do que vem acima.
+    await t.test('16. As rotas antigas /pos redirecionam (308) para /gim', async () => {
+      // Given/When: um atalho antigo gravado num tablet do balcao.
+      const ecra = await agente.get('/pos');
+
+      // Then: redirect permanente, sem 404.
+      assert.equal(ecra.status, 308);
+      assert.equal(ecra.headers.location, '/gim');
+
+      // E o catalogo antigo tambem.
+      const catalogoAntigo = await agente.get('/api/pos/artigos');
+      assert.equal(catalogoAntigo.status, 308);
+      assert.equal(catalogoAntigo.headers.location, '/api/gim/artigos');
+
+      // Seguir o redirect chega mesmo ao ecra novo, com os estaticos certos.
+      const destino = await agente.get('/gim');
+      assert.equal(destino.status, 200);
+      assert.match(destino.text, /\/css\/gim\.css/);
+      assert.match(destino.text, /\/js\/gim\.js/);
+      assert.ok(!destino.text.includes('/css/pos.css'));
+      assert.ok(!destino.text.includes('/js/pos.js'));
     });
   } finally {
     // Limpeza garantida, mesmo com falhas acima.

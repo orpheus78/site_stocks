@@ -72,7 +72,7 @@ const ARTIGO = {
   unidade: 'un'
 };
 
-const VENDA = {
+const CONSUMO = {
   id: 9,
   numero: 12,
   total: 3,
@@ -90,7 +90,7 @@ const VENDA = {
 
 const ITEM = {
   id: 1,
-  venda_id: VENDA.id,
+  consumo_id: CONSUMO.id,
   artigo_id: ARTIGO.id,
   nome_snapshot: ARTIGO.nome,
   preco_unit: 1.5,
@@ -124,27 +124,27 @@ function handlers() {
     { pattern: /FROM sessoes_caixa[\s\S]*WHERE s\.id = \?/i, handler: () => [SESSAO] },
     { pattern: /FROM sessoes_caixa/i, handler: () => [SESSAO] },
     { pattern: /FROM movimentos_caixa/i, handler: () => [] },
-    { pattern: /FROM vendas[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_vendas: 0, total: 0 }] },
+    { pattern: /FROM consumos[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_consumos: 0, total: 0 }] },
     {
-      pattern: /COUNT\(\*\) AS n_vendas[\s\S]*FROM vendas\b(?![\s\S]*JOIN)/i,
-      handler: () => [{ n_vendas: 1, total: 3, dinheiro: 0, interno: 3, multibanco: 0 }]
+      pattern: /COUNT\(\*\) AS n_consumos[\s\S]*FROM consumos\b(?![\s\S]*JOIN)/i,
+      handler: () => [{ n_consumos: 1, total: 3, dinheiro: 0, interno: 3, multibanco: 0 }]
     },
 
     // Relatorios / dashboard
     { pattern: /DATE\(v\.criado_em\) AS dia/i, handler: () => [] },
     {
-      pattern: /COUNT\(\*\) AS n_vendas[\s\S]*FROM vendas v/i,
-      handler: () => [{ n_vendas: 1, total: 3, dinheiro: 0, multibanco: 0, ticket_medio: 3 }]
+      pattern: /COUNT\(\*\) AS n_consumos[\s\S]*FROM consumos v/i,
+      handler: () => [{ n_consumos: 1, total: 3, dinheiro: 0, multibanco: 0, ticket_medio: 3 }]
     },
 
-    // Movimentos internos (vendas).
-    // ATENCAO a ordem: a listagem traz uma subconsulta "FROM venda_itens vi"
-    // para contar itens — os padroes de vendas tem de vir PRIMEIRO.
-    { pattern: /FROM venda_itens WHERE venda_id/i, handler: () => [ITEM] },
-    { pattern: /FROM vendas v[\s\S]*WHERE v\.id = \?/i, handler: () => [VENDA] },
-    { pattern: /FROM vendas v[\s\S]*ORDER BY v\.criado_em DESC/i, handler: () => [VENDA] },
-    { pattern: /FROM venda_itens vi\s+JOIN/i, handler: () => [] },
-    { pattern: /FROM vendas v/i, handler: () => [VENDA] },
+    // Movimentos internos (consumos).
+    // ATENCAO a ordem: a listagem traz uma subconsulta "FROM consumo_itens vi"
+    // para contar itens — os padroes de consumos tem de vir PRIMEIRO.
+    { pattern: /FROM consumo_itens WHERE consumo_id/i, handler: () => [ITEM] },
+    { pattern: /FROM consumos v[\s\S]*WHERE v\.id = \?/i, handler: () => [CONSUMO] },
+    { pattern: /FROM consumos v[\s\S]*ORDER BY v\.criado_em DESC/i, handler: () => [CONSUMO] },
+    { pattern: /FROM consumo_itens vi\s+JOIN/i, handler: () => [] },
+    { pattern: /FROM consumos v/i, handler: () => [CONSUMO] },
 
     // Stock
     { pattern: /FROM movimentos_stock/i, handler: () => [] },
@@ -199,13 +199,12 @@ describe('Nenhum dialogo nativo sobrevive no HTML servido', () => {
     { rota: '/admin/categorias/3/editar', perfil: 'admin' },
     { rota: '/admin/stocks', perfil: 'admin' },
     { rota: '/admin/movimentos', perfil: 'admin' },
-    { rota: '/admin/vendas', perfil: 'admin' },
-    { rota: '/admin/vendas/9', perfil: 'admin' },
+    { rota: '/admin/consumos', perfil: 'admin' },
+    { rota: '/admin/consumos/9', perfil: 'admin' },
     { rota: '/admin/relatorios', perfil: 'admin' },
     { rota: '/caixa', perfil: 'admin' },
     { rota: '/caixa/sessao/7', perfil: 'admin' },
-    { rota: '/pos', perfil: 'funcionario' },
-    { rota: '/pos/venda/9/talao', perfil: 'funcionario' }
+    { rota: '/gim', perfil: 'funcionario' }
   ];
 
   function agenteDe(perfil) {
@@ -232,7 +231,6 @@ describe('Nenhum dialogo nativo sobrevive no HTML servido', () => {
   test('Todas as paginas carregam o modulo do modal', async () => {
     for (const { rota, perfil } of PAGINAS) {
       const texto = await html(agenteDe(perfil), rota);
-      if (rota === '/pos/venda/9/talao') continue; // o talao e so para imprimir
       assert.match(texto, /src="\/js\/confirmar\.js"/, `${rota} devia carregar /js/confirmar.js`);
     }
   });
@@ -274,9 +272,9 @@ describe('Anular movimento — confirmacao pelo modal (listagem e detalhe)', () 
     'data-confirmar-detalhe="O stock dos artigos sera reposto. Esta accao nao pode ser desfeita."';
 
   test('Na listagem, o numero e o total continuam na mensagem', async () => {
-    const texto = await html(admin, '/admin/vendas');
+    const texto = await html(admin, '/admin/consumos');
 
-    assert.match(texto, /action="\/admin\/vendas\/9\/anular"/);
+    assert.match(texto, /action="\/admin\/consumos\/9\/anular"/);
     assert.ok(texto.indexOf(MENSAGEM) !== -1, 'mensagem com numero e total');
     // O que era "\n\n" na mensagem nativa e agora um paragrafo secundario.
     assert.ok(texto.indexOf(DETALHE) !== -1, 'o aviso passou a paragrafo de detalhe');
@@ -285,16 +283,16 @@ describe('Anular movimento — confirmacao pelo modal (listagem e detalhe)', () 
   });
 
   test('No detalhe, a mensagem e exatamente a mesma', async () => {
-    const texto = await html(admin, '/admin/vendas/9');
+    const texto = await html(admin, '/admin/consumos/9');
 
-    assert.match(texto, /action="\/admin\/vendas\/9\/anular"/);
+    assert.match(texto, /action="\/admin\/consumos\/9\/anular"/);
     assert.ok(texto.indexOf(MENSAGEM) !== -1);
     assert.ok(texto.indexOf(DETALHE) !== -1);
     assert.ok(texto.indexOf('confirm(') === -1);
   });
 
-  test('A terminologia mantem-se ("movimento", nunca "venda"/"pagamento")', async () => {
-    const texto = await html(admin, '/admin/vendas');
+  test('A terminologia mantem-se ("movimento", nunca "consumo"/"pagamento")', async () => {
+    const texto = await html(admin, '/admin/consumos');
     const atributos = texto.match(/data-confirmar="[^"]*"/g);
     assert.ok(atributos && atributos.length, 'devia haver pelo menos uma confirmacao');
     const atributo = atributos.join(' ');
@@ -317,9 +315,9 @@ describe('Fechar caixa — confirmacao pelo modal', () => {
   });
 });
 
-describe('POS — terminar sessao e limpar lista', () => {
-  test('O logout do POS pede confirmacao pelo painel do POS', async () => {
-    const texto = await html(funcionario, '/pos');
+describe('GIM — terminar sessao e limpar lista', () => {
+  test('O logout do GIM pede confirmacao pelo painel do GIM', async () => {
+    const texto = await html(funcionario, '/gim');
 
     assert.match(texto, /action="\/logout"/);
     assert.match(texto, /data-confirmar="Terminar sessao\?"/);
@@ -329,12 +327,12 @@ describe('POS — terminar sessao e limpar lista', () => {
     assert.ok(texto.indexOf('onsubmit=') === -1);
   });
 
-  test('O botao de limpar a lista existe e a confirmacao vive no /js/pos.js', async () => {
-    const texto = await html(funcionario, '/pos');
+  test('O botao de limpar a lista existe e a confirmacao vive no /js/gim.js', async () => {
+    const texto = await html(funcionario, '/gim');
 
-    assert.match(texto, /id="posLimpar"/);
+    assert.match(texto, /id="gimLimpar"/);
     assert.ok(texto.indexOf('confirm(') === -1);
-    assert.match(texto, /src="\/js\/pos\.js"/);
+    assert.match(texto, /src="\/js\/gim\.js"/);
   });
 });
 

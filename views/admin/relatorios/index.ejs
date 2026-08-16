@@ -23,7 +23,7 @@
   </div>
   <div class="col-6 col-lg-3">
     <div class="card kpi-card h-100"><div class="card-body">
-      <div class="kpi-etiqueta text-body-secondary">Nº de movimentos</div><div class="kpi-valor"><%= resumo.n_vendas %></div>
+      <div class="kpi-etiqueta text-body-secondary">Nº de movimentos</div><div class="kpi-valor"><%= resumo.n_consumos %></div>
     </div></div>
   </div>
   <%# Dinheiro/multibanco so existem no HISTORICO de vendas com pagamento. %>
@@ -39,6 +39,40 @@
       </div></div>
     </div>
   <% } %>
+</div>
+
+<%#
+  Rentabilidade do periodo. O custo vem do SNAPSHOT `custo_unit` gravado em
+  cada linha de consumo, nao do preco de custo atual do artigo: alterar hoje o
+  que se paga ao fornecedor nao pode reescrever a margem dos meses passados.
+%>
+<h2 class="h6">Rentabilidade do periodo</h2>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Consumido (preco de venda)</div>
+      <div class="kpi-valor"><%= eur(rentabilidade.venda) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Custo dos artigos</div>
+      <div class="kpi-valor"><%= eur(rentabilidade.custo) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100 <%= rentabilidade.margem < 0 ? 'text-bg-danger' : 'text-bg-success' %>"><div class="card-body">
+      <div class="kpi-etiqueta">Margem</div>
+      <div class="kpi-valor"><%= eur(rentabilidade.margem) %></div>
+    </div></div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="card kpi-card h-100"><div class="card-body">
+      <div class="kpi-etiqueta text-body-secondary">Margem %</div>
+      <%# Sem consumo no periodo nao ha base de calculo: mostra "—", nunca NaN. %>
+      <div class="kpi-valor"><%= pctMargem(rentabilidade.percentagem) %></div>
+    </div></div>
+  </div>
 </div>
 
 <div class="row g-4">
@@ -86,13 +120,26 @@
     <h2 class="h6">Por categoria</h2>
     <div class="table-responsive">
       <table class="table table-sm tabela-compacta">
-        <thead><tr><th scope="col">Categoria</th><th scope="col" class="text-end">Qtd</th><th scope="col" class="text-end">Total</th></tr></thead>
+        <thead><tr>
+          <th scope="col">Categoria</th><th scope="col" class="text-end">Qtd</th>
+          <th scope="col" class="text-end">Total</th><th scope="col" class="text-end">Custo</th>
+          <th scope="col" class="text-end">Margem</th>
+        </tr></thead>
         <tbody>
           <% porCategoria.forEach(function (c) { %>
-            <tr><td><%= c.categoria %></td><td class="text-end"><%= Number(c.quantidade) %></td><td class="text-end"><%= eur(c.total) %></td></tr>
+            <tr>
+              <td><%= c.categoria %></td>
+              <td class="text-end"><%= Number(c.quantidade) %></td>
+              <td class="text-end"><%= eur(c.total) %></td>
+              <td class="text-end"><%= eur(c.custo) %></td>
+              <td class="text-end text-nowrap <%= c.margem < 0 ? 'text-danger fw-bold' : '' %>">
+                <%= eur(c.margem) %>
+                <span class="text-body-secondary small">(<%= pctMargem(c.margem_pct) %>)</span>
+              </td>
+            </tr>
           <% }); %>
           <% if (!porCategoria.length) { %>
-            <tr data-sem-dados="1"><td colspan="3" class="text-body-secondary">Sem dados no periodo.</td></tr>
+            <tr data-sem-dados="1"><td colspan="5" class="text-body-secondary">Sem dados no periodo.</td></tr>
           <% } %>
         </tbody>
       </table>
@@ -121,6 +168,45 @@
   </div>
 </div>
 
+<%#
+  Margem POR ARTIGO (e nao apenas por categoria): num bar pequeno a decisao e
+  sempre sobre um artigo concreto — subir o preco deste, mudar de fornecedor
+  daquele. Uma categoria rentavel esconde facilmente o artigo que da prejuizo.
+  A tabela por categoria acima fica como visao geral.
+  Sem limite de linhas e ordenada da maior margem para a menor: as linhas
+  negativas (custo acima do preco) ficam no fim, a vermelho, e sao o sinal de
+  alarme que o dono do bar procura.
+%>
+<h2 class="h6 mt-4">Margem por artigo</h2>
+<div class="table-responsive">
+  <table class="table table-sm table-hover tabela-compacta" id="tabelaMargemArtigo">
+    <thead>
+      <tr>
+        <th scope="col">Artigo</th><th scope="col" class="text-end">Qtd</th>
+        <th scope="col" class="text-end">Consumido</th><th scope="col" class="text-end">Custo</th>
+        <th scope="col" class="text-end">Margem</th><th scope="col" class="text-end">Margem %</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% margemPorArtigo.forEach(function (a) { %>
+        <tr class="<%= a.margem < 0 ? 'table-danger' : '' %>">
+          <td><%= a.nome %></td>
+          <td class="text-end"><%= Number(a.quantidade) %></td>
+          <td class="text-end"><%= eur(a.total) %></td>
+          <td class="text-end"><%= eur(a.custo) %></td>
+          <td class="text-end <%= a.margem < 0 ? 'fw-bold' : '' %>"><%= eur(a.margem) %></td>
+          <td class="text-end"><%= pctMargem(a.margem_pct) %></td>
+        </tr>
+      <% }); %>
+      <% if (!margemPorArtigo.length) { %>
+        <tr data-sem-dados="1"><td colspan="6" class="text-body-secondary">Sem movimentos no periodo.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
 <p class="text-body-secondary small mt-3">
   Periodo: <%= de %> a <%= ate %>. Apenas movimentos concluidos (anulados nao contam).
+  O custo de cada linha e o que estava registado no artigo no MOMENTO do consumo:
+  alterar o preco de custo hoje nao altera a margem ja apurada.
 </p>

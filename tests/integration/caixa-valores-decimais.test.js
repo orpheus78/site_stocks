@@ -68,10 +68,10 @@ function handlers() {
     { pattern: /FROM sessoes_caixa/i, handler: () => [] },
     { pattern: /FROM movimentos_caixa/i, handler: () => [] },
     { pattern: /INSERT INTO movimentos_caixa/i, handler: () => ({ insertId: 1 }) },
-    { pattern: /FROM vendas[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_vendas: 0, total: 0 }] },
+    { pattern: /FROM consumos[\s\S]*sessao_caixa_id IS NULL/i, handler: () => [{ n_consumos: 0, total: 0 }] },
     {
-      pattern: /COUNT\(\*\) AS n_vendas[\s\S]*FROM vendas/i,
-      handler: () => [{ n_vendas: 0, total: 0, dinheiro: 0, interno: 0, multibanco: 0 }]
+      pattern: /COUNT\(\*\) AS n_consumos[\s\S]*FROM consumos/i,
+      handler: () => [{ n_consumos: 0, total: 0, dinheiro: 0, interno: 0, multibanco: 0 }]
     }
   ];
 }
@@ -282,9 +282,10 @@ describe('GET /caixa — marcacao dos campos de valor', () => {
   test('O modulo de valores e carregado antes do app.js', async () => {
     const admin = await sessaoDeAdmin();
     const res = await admin.get('/caixa');
-    const posModulo = res.text.indexOf('/js/valor-decimal.js');
-    const posApp = res.text.indexOf('/js/app.js');
-    assert.ok(posModulo !== -1, 'valor-decimal.js tem de ser carregado');
-    assert.ok(posModulo < posApp, 'valor-decimal.js tem de vir antes de app.js');
+    // `posicao*` = indice do texto no HTML. Nada a ver com o ecra GIM.
+    const posicaoModulo = res.text.indexOf('/js/valor-decimal.js');
+    const posicaoApp = res.text.indexOf('/js/app.js');
+    assert.ok(posicaoModulo !== -1, 'valor-decimal.js tem de ser carregado');
+    assert.ok(posicaoModulo < posicaoApp, 'valor-decimal.js tem de vir antes de app.js');
   });
 });

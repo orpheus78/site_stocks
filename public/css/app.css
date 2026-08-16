@@ -1,8 +1,8 @@
 /* ==========================================================================
-   Estilos partilhados (backoffice + caixa). O POS tem /css/pos.css.
+   Estilos partilhados (backoffice + caixa). O GIM tem /css/gim.css.
    ========================================================================== */
 :root {
-  --pos-toque-min: 64px;
+  --gim-toque-min: 64px;
 }
 
 .object-fit-cover {
@@ -11,7 +11,7 @@
 
 /* Alvos de toque generosos (caixa e accoes rapidas). */
 .btn-toque {
-  min-height: var(--pos-toque-min);
+  min-height: var(--gim-toque-min);
   font-size: 1.05rem;
   font-weight: 600;
 }
@@ -26,7 +26,7 @@
 }
 
 .teclado-num button {
-  min-height: var(--pos-toque-min);
+  min-height: var(--gim-toque-min);
   border: 1px solid var(--bs-border-color);
   border-radius: 12px;
   background: var(--bs-body-bg);
@@ -53,7 +53,7 @@
   font-size: 2rem;
   font-weight: 800;
   text-align: right;
-  min-height: var(--pos-toque-min);
+  min-height: var(--gim-toque-min);
   font-variant-numeric: tabular-nums;
 }
 

@@ -30,7 +30,9 @@
       <tr>
         <th scope="col"><span class="visually-hidden">Imagem</span></th>
         <th scope="col">Nome</th><th scope="col">Categoria</th>
-        <th scope="col" class="text-end">Preco</th><th scope="col" class="text-end">Stock</th>
+        <th scope="col" class="text-end">Custo</th><th scope="col" class="text-end">Preco</th>
+        <th scope="col" class="text-end">Margem</th>
+        <th scope="col" class="text-end">Stock</th>
         <th scope="col">Estado</th><th scope="col"></th>
       </tr>
     </thead>
@@ -55,7 +57,18 @@
               <span class="text-body-secondary">-</span>
             <% } %>
           </td>
-          <td class="text-end"><%= eur(a.preco) %></td>
+          <%#
+            Margem bruta = preco - custo, percentagem sobre o PRECO DE VENDA.
+            calcularMargem trata o preco 0 (devolve percentagem null -> "—"),
+            por isso nunca aparece NaN nem Infinity nesta coluna.
+          %>
+          <% var m = calcularMargem(a.preco, a.preco_custo); %>
+          <td class="text-end"><%= eur(m.custo) %></td>
+          <td class="text-end"><%= eur(m.venda) %></td>
+          <td class="text-end text-nowrap <%= m.margem < 0 ? 'text-danger fw-bold' : '' %>">
+            <%= eur(m.margem) %>
+            <span class="text-body-secondary small">(<%= pctMargem(m.percentagem) %>)</span>
+          </td>
           <td class="text-end">
             <% if (a.quantidade === null) { %>
               <span class="text-body-secondary">-</span>
@@ -83,7 +96,7 @@
         </tr>
       <% }); %>
       <% if (!artigos.length) { %>
-        <tr data-sem-dados="1"><td colspan="7" class="text-body-secondary">Sem artigos para este filtro.</td></tr>
+        <tr data-sem-dados="1"><td colspan="9" class="text-body-secondary">Sem artigos para este filtro.</td></tr>
       <% } %>
     </tbody>
   </table>

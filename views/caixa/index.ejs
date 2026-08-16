@@ -1,5 +1,5 @@
 <%#
-  Ecra de caixa — pensado para ser usado no mesmo ecra touch do POS.
+  Ecra de caixa — pensado para ser usado no mesmo ecra touch do GIM.
   Dados: estado {sessao, movimentos, totais, resumo}, historico.
   Campos dos forms conforme os validators em routes/caixa.routes.js:
     /caixa/abrir      -> fundo_inicial
@@ -14,11 +14,11 @@
     <% } else { %>
       <span class="badge text-bg-secondary caixa-estado-badge"><i class="bi bi-lock" aria-hidden="true"></i> Fechada</span>
     <% } %>
-    <a class="btn btn-outline-secondary" href="/pos"><i class="bi bi-basket" aria-hidden="true"></i> Voltar ao POS</a>
+    <a class="btn btn-outline-secondary" href="/gim"><i class="bi bi-basket" aria-hidden="true"></i> Voltar ao Registo</a>
   </div>
 </div>
 
-<% if (estado.semSessao && estado.semSessao.n_vendas > 0) { %>
+<% if (estado.semSessao && estado.semSessao.n_consumos > 0) { %>
   <%#
     Movimentos registados sem caixa aberta: como os movimentos internos contam
     para o dinheiro esperado, estes ficaram fora de QUALQUER fecho de caixa.
@@ -29,8 +29,8 @@
     <i class="bi bi-exclamation-triangle-fill fs-4" aria-hidden="true"></i>
     <div>
       <strong>
-        <%= estado.semSessao.n_vendas %>
-        movimento<%= estado.semSessao.n_vendas === 1 ? '' : 's' %> sem caixa associada,
+        <%= estado.semSessao.n_consumos %>
+        movimento<%= estado.semSessao.n_consumos === 1 ? '' : 's' %> sem caixa associada,
         num total de <%= eur(estado.semSessao.total) %>.
       </strong>
       <div class="small">
@@ -107,13 +107,13 @@
               <span>Fundo inicial</span><span><%= eur(estado.resumo.fundo_inicial) %></span>
             </li>
             <li class="list-group-item d-flex justify-content-between">
-              <span>Movimentos internos (<%= estado.resumo.n_vendas %>)</span>
+              <span>Movimentos internos (<%= estado.resumo.n_consumos %>)</span>
               <span class="text-success">+ <%= eur(estado.resumo.movimentos_internos) %></span>
             </li>
-            <% if (estado.resumo.vendas_dinheiro) { %>
+            <% if (estado.resumo.consumos_dinheiro) { %>
               <li class="list-group-item d-flex justify-content-between">
-                <span>Vendas em dinheiro (historico)</span>
-                <span class="text-success">+ <%= eur(estado.resumo.vendas_dinheiro) %></span>
+                <span>Recebido em dinheiro (historico)</span>
+                <span class="text-success">+ <%= eur(estado.resumo.consumos_dinheiro) %></span>
               </li>
             <% } %>
             <li class="list-group-item d-flex justify-content-between">
@@ -138,7 +138,7 @@
 
           <p class="small text-body-secondary mb-0">
             <i class="bi bi-credit-card-2-front" aria-hidden="true"></i>
-            Multibanco (historico): <strong><%= eur(estado.resumo.vendas_multibanco) %></strong> —
+            Multibanco (historico): <strong><%= eur(estado.resumo.consumos_multibanco) %></strong> —
             <strong>nao</strong> faz parte do dinheiro fisico esperado em caixa.
           </p>
         </div>

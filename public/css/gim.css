@@ -1,0 +1,1201 @@
+/* ==========================================================================
+   GIM — ecra touch atras do balcao.
+   Regras: alvos de toque >= 64px, zero scroll horizontal, contraste alto.
+   ========================================================================== */
+
+:root {
+  --gim-toque: 64px;
+  --gim-tile: 104px;
+  --gim-gap: 10px;
+  --gim-raio: 14px;
+  --gim-fundo: #10151c;
+  --gim-painel: #1b232e;
+  --gim-painel-claro: #263141;
+  --gim-borda: #35435a;
+  --gim-texto: #f4f7fb;
+  --gim-texto-fraco: #a9b6c8;
+  --gim-acento: #16a34a;
+  --gim-acento-escuro: #12833c;
+  --gim-perigo: #dc2626;
+  --gim-aviso: #f59e0b;
+}
+
+/* O layout base envolve tudo num <main class="container-fluid py-3">;
+   no GIM queremos ecra inteiro sem margens. */
+body.gim-body {
+  background: var(--gim-fundo);
+  color: var(--gim-texto);
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+body.gim-body > main.container-fluid {
+  padding: 0 !important;
+  margin: 0;
+  max-width: none;
+}
+
+body.gim-body .alert {
+  margin: 0;
+  border-radius: 0;
+}
+
+.gim {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  font-size: 16px;
+}
+
+/* O atributo `hidden` tem de ganhar a qualquer `display` definido acima:
+   varios elementos do GIM sao escondidos por JS (grelha, badges, campos). */
+.gim [hidden],
+.gim-modal [hidden],
+.gim-sucesso [hidden] {
+  display: none !important;
+}
+
+/* Nada de seleccao de texto acidental num ecra touch. */
+.gim button,
+.gim .gim-mini-btn,
+.gim .gim-tile {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* ---------- Barra superior ---------- */
+.gim-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gim-gap);
+  padding: 6px 12px;
+  background: #0b1016;
+  border-bottom: 1px solid var(--gim-borda);
+  flex: 0 0 auto;
+}
+
+.gim-topo-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  font-size: 0.9rem;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-topo-marca {
+  font-weight: 700;
+  color: var(--gim-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gim-topo-operador,
+.gim-topo-relogio {
+  white-space: nowrap;
+}
+
+.gim-topo-acoes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* Botoes deliberadamente pequenos: sao "saidas" do ecra de movimentos. */
+.gim-mini-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  border-radius: 8px;
+  border: 1px solid var(--gim-borda);
+  background: transparent;
+  color: var(--gim-texto-fraco);
+  text-decoration: none;
+}
+
+.gim-mini-btn:hover,
+.gim-mini-btn:focus-visible {
+  color: var(--gim-texto);
+  border-color: var(--gim-texto-fraco);
+}
+
+.gim-mini-btn-sair:hover {
+  color: #fff;
+  background: var(--gim-perigo);
+  border-color: var(--gim-perigo);
+}
+
+/* ---------- Aviso de caixa fechada ----------
+   Faixa fina entre a barra superior e o corpo. Nao rouba altura ao catalogo
+   (flex: 0 0 auto) nem intercepta toques fora do proprio atalho. */
+.gim-aviso-caixa {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  line-height: 1.25;
+  color: #1c1300;
+  background: var(--gim-aviso);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.gim-aviso-caixa i {
+  font-size: 1rem;
+  flex: 0 0 auto;
+}
+
+.gim-aviso-caixa-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--gim-aviso);
+  background: #1c1300;
+}
+
+.gim-aviso-caixa-btn:hover,
+.gim-aviso-caixa-btn:focus-visible {
+  color: #fff;
+  background: #000;
+}
+
+/* ---------- Corpo em 2 colunas ---------- */
+.gim-corpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- Catalogo ---------- */
+.gim-catalogo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.gim-filtros {
+  display: flex;
+  align-items: center;
+  gap: var(--gim-gap);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gim-borda);
+  flex: 0 0 auto;
+}
+
+.gim-categorias {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.gim-categorias::-webkit-scrollbar {
+  display: none;
+}
+
+.gim-categoria {
+  flex: 0 0 auto;
+  min-height: var(--gim-toque);
+  min-width: 110px;
+  padding: 8px 18px;
+  border-radius: var(--gim-raio);
+  border: 2px solid transparent;
+  background: var(--gim-painel-claro);
+  color: var(--gim-texto);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.gim-categoria.is-ativa {
+  border-color: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+.gim-pesquisa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 240px;
+}
+
+.gim-pesquisa > .bi-search {
+  position: absolute;
+  left: 12px;
+  color: var(--gim-texto-fraco);
+  pointer-events: none;
+}
+
+.gim-pesquisa-input {
+  width: 100%;
+  min-height: var(--gim-toque);
+  padding: 8px 44px 8px 36px;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: var(--gim-painel);
+  color: var(--gim-texto);
+  font-size: 1.05rem;
+}
+
+.gim-pesquisa-input::placeholder {
+  color: var(--gim-texto-fraco);
+}
+
+.gim-pesquisa-limpar {
+  position: absolute;
+  right: 6px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--gim-painel-claro);
+  color: var(--gim-texto);
+}
+
+/* ---------- Grelha de artigos ---------- */
+.gim-grelha {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--gim-gap);
+  padding: 12px;
+  align-content: start;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gim-tile {
+  position: relative;
+  min-height: var(--gim-tile);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-painel-claro);
+  color: #fff;
+  text-align: left;
+  overflow: hidden;
+  transition: transform 0.06s ease-out;
+}
+
+.gim-tile:active {
+  transform: scale(0.96);
+}
+
+/* Feedback visual imediato ao tocar. */
+.gim-tile.is-tocado {
+  animation: gim-flash 0.28s ease-out;
+}
+
+@keyframes gim-flash {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.9) inset; }
+  40% { box-shadow: 0 0 0 200px rgba(255, 255, 255, 0.35) inset; }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0) inset; }
+}
+
+.gim-tile-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Legibilidade do nome/preco por cima da imagem ou da cor da categoria. */
+.gim-tile-texto {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.gim-tile-nome {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gim-tile-preco {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.gim-tile-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 15px;
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+  font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Alerta de stock no tile. Ambar = a acabar; vermelho = esgotado/negativo.
+   Nunca desativa o tile: e so um sinal para o funcionario avisar o responsavel. */
+.gim-tile-stock {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+  /* Contorno escuro: garante contraste sobre imagens claras do artigo. */
+  border: 2px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  background: #f59e0b;
+  color: #1a1200;
+}
+
+.gim-tile-stock.is-esgotado {
+  background: var(--gim-perigo);
+  color: #fff;
+}
+
+/* ---------- Artigos em falta (stock abaixo do minimo) ---------- */
+
+/* Indicador no topo. Escondido quando nao ha nada em falta (atributo hidden). */
+.gim-falta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: var(--gim-toque);
+  padding: 0 18px;
+  border: 2px solid #f59e0b;
+  border-radius: var(--gim-raio);
+  background: #4a3305;
+  color: #ffd694;
+  font-size: 0.98rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.gim-falta-btn[hidden] {
+  display: none;
+}
+
+.gim-falta-btn i {
+  font-size: 1.3rem;
+  color: #fbbf24;
+}
+
+.gim-falta-btn:active {
+  background: #6b4907;
+}
+
+/* Painel/modal com a lista, sobre o ecra todo. */
+.gim-falta {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(3, 7, 12, 0.82);
+}
+
+.gim-falta[hidden] {
+  display: none;
+}
+
+.gim-falta-caixa {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 100%;
+  padding: 20px;
+  border-radius: var(--gim-raio);
+  border: 2px solid #f59e0b;
+  background: var(--gim-painel);
+  color: var(--gim-texto);
+}
+
+.gim-falta-titulo {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.gim-falta-ajuda {
+  margin: 6px 0 14px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--gim-texto);
+}
+
+.gim-falta-lista {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gim-falta-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border-left: 6px solid #f59e0b;
+  background: var(--gim-painel-claro);
+}
+
+.gim-falta-item.is-esgotado {
+  border-left-color: var(--gim-perigo);
+}
+
+.gim-falta-nome {
+  font-size: 1.1rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gim-falta-valores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+.gim-falta-atual {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.gim-falta-item.is-esgotado .gim-falta-atual {
+  color: #ff8a8a;
+}
+
+.gim-falta-minimo {
+  font-size: 0.85rem;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-falta-fechar {
+  min-height: 72px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.gim-falta-fechar:active {
+  background: var(--gim-acento-escuro);
+}
+
+/* ---------- Estado (loading / vazio / erro) ---------- */
+.gim-estado {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-estado[hidden] {
+  display: none;
+}
+
+.gim-estado .gim-estado-btn {
+  margin-top: 12px;
+  min-height: var(--gim-toque);
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+/* ---------- Carrinho ---------- */
+.gim-carrinho {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--gim-painel);
+  border-left: 1px solid var(--gim-borda);
+}
+
+.gim-carrinho-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gim-borda);
+  flex: 0 0 auto;
+}
+
+.gim-carrinho-titulo {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.gim-limpar {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  border: 1px solid var(--gim-borda);
+  background: transparent;
+  color: var(--gim-texto-fraco);
+  font-size: 1.2rem;
+}
+
+.gim-limpar:not(:disabled):hover {
+  background: var(--gim-perigo);
+  border-color: var(--gim-perigo);
+  color: #fff;
+}
+
+.gim-limpar:disabled {
+  opacity: 0.35;
+}
+
+.gim-linhas {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gim-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--gim-painel-claro);
+}
+
+.gim-linha.is-nova {
+  animation: gim-entrada 0.25s ease-out;
+}
+
+@keyframes gim-entrada {
+  from { background: var(--gim-acento); }
+  to { background: var(--gim-painel-claro); }
+}
+
+.gim-linha-info {
+  min-width: 0;
+}
+
+.gim-linha-nome {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gim-linha-unit {
+  font-size: 0.82rem;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-linha-subtotal {
+  font-size: 1.15rem;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gim-linha-acoes {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gim-qtd-btn {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: #3a4a61;
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gim-qtd-btn:active {
+  background: #4b5f7c;
+}
+
+.gim-qtd-valor {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.gim-remover {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 12px;
+  background: #4a2020;
+  color: #ffb4b4;
+  font-size: 1.1rem;
+}
+
+.gim-remover:active {
+  background: var(--gim-perigo);
+  color: #fff;
+}
+
+.gim-carrinho-vazio {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--gim-texto-fraco);
+  font-size: 0.95rem;
+}
+
+.gim-carrinho-vazio[hidden] {
+  display: none;
+}
+
+.gim-carrinho-vazio .bi {
+  display: block;
+  font-size: 1.8rem;
+  margin-bottom: 8px;
+}
+
+.gim-carrinho-rodape {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-top: 1px solid var(--gim-borda);
+  background: #141c26;
+}
+
+.gim-total-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gim-total-etiqueta {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gim-texto-fraco);
+  letter-spacing: 0.06em;
+}
+
+.gim-total-valor {
+  font-size: clamp(2.2rem, 4.2vw, 3.2rem);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.gim-total-artigos {
+  font-size: 0.85rem;
+  color: var(--gim-texto-fraco);
+  margin-bottom: 10px;
+}
+
+.gim-registar {
+  width: 100%;
+  min-height: 88px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.gim-registar:not(:disabled):active {
+  background: var(--gim-acento-escuro);
+}
+
+.gim-registar:disabled {
+  background: #2c3746;
+  color: #6d7d92;
+}
+
+/* ---------- Confirmacao do movimento (ecra inteiro) ---------- */
+.gim-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+  background: var(--gim-fundo);
+}
+
+.gim-modal[hidden],
+.gim-sucesso[hidden] {
+  display: none;
+}
+
+.gim-modal-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--gim-borda);
+  flex: 0 0 auto;
+}
+
+.gim-modal-titulo {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.gim-modal-total {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.gim-modal-total span {
+  color: var(--gim-texto-fraco);
+  font-size: 0.95rem;
+}
+
+.gim-modal-total strong {
+  font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.gim-modal-fechar {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  border: 1px solid var(--gim-borda);
+  background: transparent;
+  color: var(--gim-texto);
+  font-size: 1.2rem;
+}
+
+.gim-modal-corpo {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gim-modal-ajuda {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--gim-raio);
+  background: var(--gim-painel);
+  border: 1px solid var(--gim-borda);
+  color: var(--gim-texto-fraco);
+  font-size: 1.05rem;
+}
+
+/* Resumo do que vai ser registado (so leitura). */
+.gim-resumo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gim-resumo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 16px;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: var(--gim-painel);
+}
+
+.gim-resumo-nome {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.gim-resumo-valor {
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.gim-movimento-erro {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #450a0a;
+  color: #fecaca;
+  font-weight: 600;
+}
+
+.gim-movimento-erro[hidden] {
+  display: none;
+}
+
+.gim-modal-rodape {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--gim-borda);
+  background: #0b1016;
+}
+
+.gim-btn-cancelar {
+  min-height: 80px;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: transparent;
+  color: var(--gim-texto);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.gim-btn-confirmar {
+  min-height: 80px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.gim-btn-confirmar:disabled {
+  background: #2c3746;
+  color: #6d7d92;
+}
+
+.gim-btn-confirmar.is-ocupado {
+  opacity: 0.7;
+}
+
+/* ---------- Ecra de sucesso ---------- */
+.gim-sucesso {
+  position: fixed;
+  inset: 0;
+  z-index: 1090;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(5, 10, 16, 0.96);
+}
+
+.gim-sucesso-caixa {
+  width: min(640px, 100%);
+  padding: 28px 24px;
+  border-radius: 20px;
+  background: var(--gim-painel);
+  border: 2px solid var(--gim-acento);
+  text-align: center;
+}
+
+.gim-sucesso-icone {
+  font-size: 3.6rem;
+  color: var(--gim-acento);
+}
+
+.gim-sucesso-titulo {
+  margin: 8px 0 4px;
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.gim-sucesso-numero {
+  margin: 0 0 16px;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-sucesso-acoes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.gim-sucesso-nova {
+  min-height: 80px;
+  border: 0;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+/* ---------- Confirmacao (painel proprio, substitui o confirm() nativo) ----------
+   Marcacao criada por /js/confirmar.js e pendurada no <body>, fora de .gim —
+   por isso as regras de [hidden] tem de estar aqui tambem. */
+.gim-confirmar {
+  position: fixed;
+  inset: 0;
+  z-index: 1095;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(3, 7, 12, 0.88);
+}
+
+.gim-confirmar[hidden] {
+  display: none !important;
+}
+
+.gim-confirmar-caixa {
+  width: min(640px, 100%);
+  padding: 24px;
+  border-radius: 20px;
+  border: 2px solid var(--gim-borda);
+  background: var(--gim-painel);
+  color: var(--gim-texto);
+}
+
+.gim-confirmar-titulo {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.gim-confirmar-mensagem {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.gim-confirmar-detalhe {
+  margin: 0 0 20px;
+  font-size: 1.05rem;
+  color: var(--gim-texto-fraco);
+  overflow-wrap: anywhere;
+}
+
+.gim-confirmar-detalhe[hidden] {
+  display: none !important;
+}
+
+/* Cancelar fica a ESQUERDA, onde o operador ja espera o botao de recuo.
+   O botao destrutivo nunca ocupa esse lugar e leva um intervalo largo. */
+.gim-confirmar-accoes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.gim-confirmar-cancelar,
+.gim-confirmar-ok {
+  min-height: 88px;
+  border-radius: var(--gim-raio);
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0 12px;
+}
+
+.gim-confirmar-cancelar {
+  border: 2px solid var(--gim-borda);
+  background: var(--gim-painel-claro);
+  color: var(--gim-texto);
+}
+
+.gim-confirmar-ok {
+  border: 0;
+  background: var(--gim-acento);
+  color: #fff;
+}
+
+.gim-confirmar-ok.is-perigo {
+  background: var(--gim-perigo);
+  box-shadow: inset 0 0 0 2px #ff8a8a;
+}
+
+.gim-confirmar-cancelar:active {
+  background: var(--gim-borda);
+}
+
+.gim-confirmar-ok:active {
+  opacity: 0.85;
+}
+
+.gim-confirmar button:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* ---------- Toasts ---------- */
+.gim-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: min(560px, calc(100vw - 24px));
+  pointer-events: none;
+}
+
+.gim-toast {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: #1f2937;
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: gim-toast-in 0.18s ease-out;
+}
+
+.gim-toast-sucesso { background: var(--gim-acento); }
+.gim-toast-aviso { background: #b45309; }
+.gim-toast-erro { background: var(--gim-perigo); }
+
+@keyframes gim-toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Foco visivel (acessibilidade) ---------- */
+.gim button:focus-visible,
+.gim a:focus-visible,
+.gim input:focus-visible,
+.gim-modal button:focus-visible,
+.gim-sucesso button:focus-visible,
+.gim-sucesso a:focus-visible,
+.gim-falta button:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* ---------- Ecras estreitos / tablets em retrato ---------- */
+@media (max-width: 900px) {
+  .gim-corpo {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .gim-pesquisa {
+    flex-basis: 170px;
+  }
+}
+
+@media (max-width: 680px) {
+  .gim-corpo {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .gim-carrinho {
+    border-left: 0;
+    border-top: 1px solid var(--gim-borda);
+    max-height: 52vh;
+  }
+
+  .gim-filtros {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .gim-pesquisa {
+    flex-basis: auto;
+  }
+
+  /* Em retrato o indicador ocupa a largura toda: continua legivel de relance. */
+  .gim-falta-btn {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gim-tile,
+  .gim-tile.is-tocado,
+  .gim-linha.is-nova,
+  .gim-toast {
+    animation: none;
+    transition: none;
+  }
+}

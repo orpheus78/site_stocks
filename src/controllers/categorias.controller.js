@@ -52,7 +52,7 @@ async function remover(req, res) {
 
   const nArtigos = await categoriasRepo.contarArtigos(categoria.id);
   if (nArtigos > 0) {
-    // Nao apagar categorias em uso: desativar preserva o historico de vendas.
+    // Nao apagar categorias em uso: desativar preserva o historico de consumos.
     await categoriasRepo.atualizar(categoria.id, { ...categoria, ativo: false });
     setFlash(req, 'warning', `Categoria tem ${nArtigos} artigo(s); foi desativada em vez de eliminada.`);
   } else {

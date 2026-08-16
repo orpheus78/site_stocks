@@ -8,7 +8,7 @@ contratos de API, ver o [README](../README.md).
 - [Visão geral](#visão-geral)
 - [Camadas](#camadas)
 - [Responsabilidade de cada pasta](#responsabilidade-de-cada-pasta)
-- [Fluxo de uma venda](#fluxo-de-uma-venda)
+- [Fluxo de um consumo](#fluxo-de-um-consumo)
 - [Onde está a lógica de negócio](#onde-está-a-lógica-de-negócio)
 - [Convenções e decisões transversais](#convenções-e-decisões-transversais)
 - [Onde tocar para adicionar uma funcionalidade](#onde-tocar-para-adicionar-uma-funcionalidade)
@@ -18,13 +18,13 @@ contratos de API, ver o [README](../README.md).
 ## Visão geral
 
 Aplicação Express 5 monolítica, renderizada no servidor com EJS, com uma única API JSON
-(o POS) e o resto em formulários HTML clássicos. Não há bundler, framework de frontend nem
-injeção de dependências: o JavaScript do POS é `public/js/pos.js` em ES5 puro e os módulos
+(a Gestão de Movimentos) e o resto em formulários HTML clássicos. Não há bundler, framework de frontend nem
+injeção de dependências: o JavaScript do GIM é `public/js/gim.js` em ES5 puro e os módulos
 do servidor fazem `require` diretamente uns dos outros.
 
 ```mermaid
 flowchart LR
-    Browser["Browser<br/>POS táctil / backoffice"]
+    Browser["Browser<br/>GIM táctil / backoffice"]
     subgraph App["Aplicação Node (src/)"]
         R[routes] --> C[controllers]
         C --> S[services]
@@ -48,13 +48,19 @@ regra de negócio envolvida (por exemplo, listar categorias para preencher um `<
 
 ### 1. `routes/` — desenho da API e validação de entrada
 
-Definem caminho, método, middlewares de autenticação (`requireAuth`, `requirePos`) e as
+Definem caminho, método, middlewares de autenticação (`requireAuth`, `requireGim`) e as
 regras de `express-validator`. **Não contêm lógica.** Após as regras vem sempre o
 middleware `validate`, que decide o que fazer com um payload inválido: `422` JSON para
 `/api/*`, ou flash + redirect para trás nos formulários.
 
 `routes/index.js` é a raiz: expõe `/`, `/health` e `/ready` e monta os restantes routers.
 `routes/admin.routes.js` aplica `requireAuth` a todo o `/admin` com um único `router.use`.
+
+`routes/gim.routes.js` termina com um bloco de **compatibilidade temporária**: as rotas
+antigas `/pos`, `/api/pos/artigos` e `/pos/pin` (o ecrã chamava-se POS) respondem `308` a
+apontar para os equivalentes em `/gim`. É um andaime de migração para os atalhos já
+gravados nos tablets do balcão e pode ser removido quando deixarem de existir. Usa-se
+`308` e não `301` porque preserva o método e o corpo do pedido.
 
 ### 2. `controllers/` — tradução HTTP ↔ domínio
 
@@ -89,7 +95,7 @@ const run = (conn) => conn || db;
 Todas as funções de repositório recebem um `conn` opcional como último argumento. Chamadas
 fora de transação usam o pool; chamadas dentro de uma transação recebem a ligação e
 participam nela. As funções que dependem obrigatoriamente de transação — as que usam
-`FOR UPDATE`, como `vendasRepo.proximoNumero`, `vendasRepo.porIdParaAtualizar` e
+`FOR UPDATE`, como `consumosRepo.proximoNumero`, `consumosRepo.porIdParaAtualizar` e
 `stocksRepo.porArtigoParaAtualizar` — usam `conn.query` diretamente, o que as torna
 impossíveis de chamar por engano fora de uma transação.
 
@@ -113,7 +119,7 @@ que evita conversões espalhadas pelo código.
 | `src/server.js` | Ponto de entrada. Testa a ligação à base de dados (sem falhar o arranque), põe a app à escuta e trata de `SIGTERM`/`SIGINT` com encerramento limpo. |
 | `src/config/env.js` | Única fonte de configuração. Lê o `.env` via dotenv, converte tipos, aplica defaults e impõe `SESSION_SECRET` em produção. **Nenhum outro módulo lê `process.env`** (exceto `db/seed.js`, para as variáveis `SEED_ADMIN_*`). |
 | `src/config/db.js` | Pool MariaDB, helpers de query e transação. |
-| `src/middleware/auth.js` | Guards (`requireAuth`, `requireAdmin`, `requirePos`), `locals` (expõe utilizador, flash e `currentPath` às views) e `setFlash`. Distingue pedidos de API (responde JSON) de pedidos de página (redireciona). |
+| `src/middleware/auth.js` | Guards (`requireAuth`, `requireAdmin`, `requireGim`), `locals` (expõe utilizador, flash e `currentPath` às views) e `setFlash`. Distingue pedidos de API (responde JSON) de pedidos de página (redireciona). |
 | `src/middleware/validate.js` | Handler central do `express-validator`. |
 | `src/middleware/upload.js` | Configuração do multer: destino, nome de ficheiro aleatório, filtro de MIME, limite de tamanho e tradução de erros do multer para mensagens de negócio. |
 | `src/middleware/layout.js` | Suporte a layout para EJS sem dependências extra: renderiza a view para string e injeta-a em `views/layouts/main.ejs`. `layout: false` salta o layout (usado no talão). |
@@ -123,7 +129,7 @@ que evita conversões espalhadas pelo código.
 | `src/repositories/` | SQL parametrizado. |
 | `src/utils.js` | Helpers puros partilhados: `round2` (dinheiro), `eur`, `hojeISO`, `diasAtrasISO`, `dataHoraPT`, `boolCampo`. |
 | `views/` | Templates EJS. `layouts/main.ejs` é o esqueleto; `partials/` tem navbar, flash e footer; as restantes pastas espelham as áreas funcionais. |
-| `public/` | Assets servidos como estáticos: `css/`, `js/` (incluindo `pos.js`) e `uploads/` (imagens de artigos). |
+| `public/` | Assets servidos como estáticos: `css/`, `js/` (incluindo `gim.js`) e `uploads/` (imagens de artigos). |
 | `db/` | `schema.sql` (fonte de verdade do modelo), `apply-schema.js` e `seed.js`. |
 | `tests/` | `unit/` (funções puras), `integration/` (HTTP com base de dados falsa), `helpers/fakeDb.js`, `e2e/` (plano, ainda por executar). |
 
@@ -132,16 +138,16 @@ que evita conversões espalhadas pelo código.
 `views/layouts/main.ejs` aceita três locals opcionais, sempre definidos pelo controller e
 **nunca a partir de input do utilizador**:
 
-- `estilos` — array de hrefs de CSS extra (ex.: `['/css/pos.css']`);
+- `estilos` — array de hrefs de CSS extra (ex.: `['/css/gim.css']`);
 - `scripts` — array de srcs de JS extra, carregados com `defer`;
-- `bodyClass` — classe aplicada ao `<body>` (ex.: `pos-body`, `talao-body`).
+- `bodyClass` — classe aplicada ao `<body>` (ex.: `gim-body`).
 
-Existe ainda `layoutSemNav: true` para páginas que não devem mostrar a navbar (login, POS,
-talão).
+Existe ainda `layoutSemNav: true` para páginas que não devem mostrar a navbar nem o
+rodapé (login, GIM).
 
 ---
 
-## Fluxo de uma venda
+## Fluxo de um consumo
 
 Do toque no ecrã até ao commit da transação.
 
@@ -149,22 +155,22 @@ Do toque no ecrã até ao commit da transação.
 sequenceDiagram
     autonumber
     actor Op as Funcionário
-    participant POS as public/js/pos.js
-    participant RT as pos.routes.js
-    participant MW as requirePos + validate
-    participant CT as pos.controller.js
-    participant SV as vendas.service.js
+    participant GIM as public/js/gim.js
+    participant RT as gim.routes.js
+    participant MW as requireGim + validate
+    participant CT as gim.controller.js
+    participant SV as consumos.service.js
     participant ST as stock.service.js
     participant RP as repositories
     participant DB as MariaDB
 
-    Op->>POS: toca nos artigos e em "Pagar"
-    POS->>POS: valida pagamento localmente (só UX)
-    POS->>RT: POST /api/vendas { itens, metodo_pagamento, valores }
+    Op->>GIM: toca nos artigos e em "Pagar"
+    GIM->>GIM: valida pagamento localmente (só UX)
+    GIM->>RT: POST /api/consumos { itens, metodo_pagamento, valores }
     RT->>MW: guard de sessão + regras express-validator
-    MW-->>POS: 401 sem sessão / 422 payload inválido
-    MW->>CT: criarVenda(req, res)
-    CT->>SV: criarVenda({ itens, pagamento, utilizadorId })
+    MW-->>GIM: 401 sem sessão / 422 payload inválido
+    MW->>CT: criarConsumo(req, res)
+    CT->>SV: criarConsumo({ itens, pagamento, utilizadorId })
     SV->>SV: agregarItens() — junta repetidos e valida
     SV->>RP: caixaRepo.sessaoAberta()
     SV->>DB: BEGIN
@@ -177,13 +183,13 @@ sequenceDiagram
 
     SV->>SV: total = soma dos subtotais (sem IVA)
     SV->>SV: calcularPagamento(total, pagamento) → troco
-    SV->>RP: vendasRepo.proximoNumero(conn)
+    SV->>RP: consumosRepo.proximoNumero(conn)
     RP->>DB: SELECT MAX(numero)+1 ... FOR UPDATE
-    SV->>RP: vendasRepo.criar(cabeçalho, conn)
+    SV->>RP: consumosRepo.criar(cabeçalho, conn)
 
     loop por cada linha
-        SV->>RP: vendasRepo.criarItem(linha, conn)
-        SV->>ST: aplicarMovimento(conn, tipo 'venda')
+        SV->>RP: consumosRepo.criarItem(linha, conn)
+        SV->>ST: aplicarMovimento(conn, tipo 'consumo')
         ST->>RP: stocksRepo.porArtigoParaAtualizar(id, conn)
         RP->>DB: SELECT ... FROM stocks WHERE artigo_id = ? FOR UPDATE
         ST->>RP: stocksRepo.definirQuantidade + movRepo.registar
@@ -192,32 +198,32 @@ sequenceDiagram
 
     SV->>DB: COMMIT
     SV-->>CT: { id, numero, total, troco, avisosStock }
-    CT-->>POS: 201 { ok, venda, talao_url, avisos }
-    POS->>Op: mostra número da venda, troco e link do talão
+    CT-->>GIM: 201 { ok, consumo, avisos }
+    GIM->>Op: mostra o número do movimento registado
 ```
 
 ### Pontos a reter
 
-1. **A validação do browser é só conforto.** `pos.js` calcula troco e bloqueia o botão para
+1. **A validação do browser é só conforto.** `gim.js` calcula troco e bloqueia o botão para
    dar feedback imediato, mas a decisão real é toda do servidor. Um pedido forjado com
    preços ou totais inventados é ignorado: só `artigo_id` e `quantidade` são lidos.
 2. **Tudo o que é escrito está numa transação.** Cabeçalho, itens, atualização de stock e
    movimentos de stock partilham a mesma ligação. Qualquer erro no meio faz `rollback` — não
-   fica uma venda sem itens nem stock descontado sem venda.
+   fica um consumo sem itens nem stock descontado sem consumo.
 3. **`FOR UPDATE` em dois sítios.** Na numeração (evita números duplicados com postos
    concorrentes) e na linha de stock de cada artigo (evita perder decrementos simultâneos).
 4. **A caixa aberta é lida antes da transação** e apenas para preencher `sessao_caixa_id`.
-   Não haver caixa aberta não impede a venda: o campo fica a `NULL`.
+   Não haver caixa aberta não impede o consumo: o campo fica a `NULL`.
 5. **Stock negativo não é erro.** `aplicarMovimento` devolve `{ negativo: true }`, o serviço
-   acumula uma mensagem em `avisosStock` e a venda segue para commit. Ver a decisão de design
+   acumula uma mensagem em `avisosStock` e o consumo segue para commit. Ver a decisão de design
    no [README](../README.md#decisões-de-design).
 
-### Anulação de uma venda
+### Anulação de um consumo
 
-`POST /admin/vendas/:id/anular` → `vendas.service.anularVenda`, também numa transação:
-bloqueia a venda com `SELECT ... FOR UPDATE` (evita anulação dupla), rejeita se já estiver
+`POST /admin/consumos/:id/anular` → `consumos.service.anularConsumo`, também numa transação:
+bloqueia o consumo com `SELECT ... FOR UPDATE` (evita anulação dupla), rejeita se já estiver
 anulada (`409`), cria um movimento de `entrada` por cada item com `artigo_id` ainda
-existente e marca a venda como `anulada`. A venda nunca é apagada.
+existente e marca o consumo como `anulada`. O consumo nunca é apagado.
 
 ---
 
@@ -225,11 +231,11 @@ existente e marca a venda como `anulada`. A venda nunca é apagada.
 
 | Regra | Ficheiro | Função |
 | --- | --- | --- |
-| Agregação e validação do carrinho | `services/vendas.service.js` | `agregarItens` |
-| Subtotal e total (sem IVA) | `services/vendas.service.js` | `calcularSubtotal`, `calcularTotalCarrinho` |
-| Método de pagamento e troco | `services/vendas.service.js` | `calcularPagamento` |
-| Transação da venda | `services/vendas.service.js` | `criarVenda` |
-| Anulação e reposição de stock | `services/vendas.service.js` | `anularVenda` |
+| Agregação e validação do carrinho | `services/consumos.service.js` | `agregarItens` |
+| Subtotal e total (sem IVA) | `services/consumos.service.js` | `calcularSubtotal`, `calcularTotalCarrinho` |
+| Método de pagamento e troco | `services/consumos.service.js` | `calcularPagamento` |
+| Transação do consumo | `services/consumos.service.js` | `criarConsumo` |
+| Anulação e reposição de stock | `services/consumos.service.js` | `anularConsumo` |
 | Efeito de um movimento no stock | `services/stock.service.js` | `calcularNovaQuantidade` |
 | Stock negativo permitido | `services/stock.service.js` | `aplicarMovimento`, `isStockNegativo` |
 | Alerta de stock baixo | `services/stock.service.js` | `isStockBaixo` |
@@ -238,7 +244,7 @@ existente e marca a venda como `anulada`. A venda nunca é apagada.
 | Fecho e diferença | `services/caixa.service.js` | `fechar` |
 | Autenticação e comparação em tempo constante | `services/auth.service.js` | `autenticar`, `autenticarPorPin` |
 | Agregações de relatórios | `services/relatorios.service.js` + `repositories/relatorios.repo.js` | `periodo`, `dashboard` |
-| Soft-delete de artigos | `controllers/artigos.controller.js` | `remover` (usa `artigosRepo.temVendas`) |
+| Soft-delete de artigos | `controllers/artigos.controller.js` | `remover` (usa `artigosRepo.temConsumos`) |
 | Soft-delete de categorias | `controllers/categorias.controller.js` | `remover` (usa `categoriasRepo.contarArtigos`) |
 | Arredondamento monetário | `src/utils.js` | `round2` |
 
@@ -266,7 +272,7 @@ multiplicação em JavaScript. Nunca comparar valores monetários com `===` sem 
 as comparações de suficiência usam uma margem de `0.001`.
 
 **Datas.** Usar `hojeISO` / `diasAtrasISO` de `utils.js`, nunca `toISOString()` — este
-converte para UTC e, em Portugal no horário de verão, atira as vendas da meia-noite para o
+converte para UTC e, em Portugal no horário de verão, atira os consumos da meia-noite para o
 dia anterior. Os intervalos nos repositórios são fechados: `de 00:00:00` a `ate 23:59:59`.
 
 **Sem injeção de dependências.** Os repositórios fazem `require('../config/db')`
@@ -335,12 +341,12 @@ artigo sem código).
 Acrescentar o `<input name="codigo_barras" value="<%= artigo ? artigo.codigo_barras || '' : '' %>">`.
 Se o campo também deve ser visível na listagem, acrescentar a coluna em `views/admin/artigos/index.ejs`.
 
-**6. POS (só se o campo for usado na venda)**
+**6. GIM (só se o campo for usado no consumo)**
 
-- [`src/controllers/pos.controller.js`](../src/controllers/pos.controller.js): incluir o
-  campo no objeto devolvido por `catalogo`. **Só expor o que o POS precisa** — o catálogo é
+- [`src/controllers/gim.controller.js`](../src/controllers/gim.controller.js): incluir o
+  campo no objeto devolvido por `catalogo`. **Só expor o que o GIM precisa** — o catálogo é
   público para qualquer sessão iniciada.
-- [`public/js/pos.js`](../public/js/pos.js): usar o campo na pesquisa/filtragem.
+- [`public/js/gim.js`](../public/js/gim.js): usar o campo na pesquisa/filtragem.
 
 **7. Testes**
 
@@ -353,7 +359,7 @@ Se o campo também deve ser visível na listagem, acrescentar a coluna em `views
 
 Atualizar a secção *Modelo de dados* do [README](../README.md#modelo-de-dados) — texto da
 tabela `artigos` e o `erDiagram` — e, se o contrato da API mudar, a secção
-*Contrato `POST /api/vendas`*.
+*Contrato `POST /api/consumos`*.
 
 ### Padrão geral
 
@@ -362,7 +368,7 @@ tabela `artigos` e o `erDiagram` — e, se o contrato da API mudar, a secção
 | Novo campo numa entidade | `db/schema.sql` → repositório → rota (validação) → controller → view → testes → README |
 | Nova regra de negócio | Serviço (de preferência como função pura exportada) → teste unitário → controller, se mudar a resposta |
 | Novo ecrã de backoffice | View → controller → rota (montada em `admin.routes.js`) → link em `views/partials/navbar.ejs` |
-| Novo endpoint JSON | Rota em `/api/*` com `requirePos`/`requireAuth` e validação → controller → serviço → contrato no README |
+| Novo endpoint JSON | Rota em `/api/*` com `requireGim`/`requireAuth` e validação → controller → serviço → contrato no README |
 | Nova configuração | `src/config/env.js` (com default) → `.env.example` → tabela de variáveis no README |
 | Nova query/relatório | Repositório (SQL parametrizado) → serviço (agregação) → controller → view |
 

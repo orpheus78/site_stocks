@@ -20,7 +20,7 @@ router.post(
 );
 
 router.post(
-  '/pos/pin',
+  '/gim/pin',
   [body('pin').trim().isLength({ min: 4, max: 4 }).isNumeric().withMessage('PIN invalido.')],
   validate,
   ctrl.loginPorPin

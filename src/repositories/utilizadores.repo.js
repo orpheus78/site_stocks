@@ -17,7 +17,7 @@ async function porId(id, conn) {
   return rows[0] || null;
 }
 
-/** Utilizadores ativos com PIN definido (para login rapido no POS). */
+/** Utilizadores ativos com PIN definido (para login rapido no GIM). */
 async function ativosComPin(conn) {
   return run(conn).query(
     `SELECT ${CAMPOS} FROM utilizadores WHERE ativo = 1 AND pin_hash IS NOT NULL ORDER BY nome`

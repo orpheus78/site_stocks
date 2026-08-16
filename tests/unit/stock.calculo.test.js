@@ -32,20 +32,20 @@ describe('stock.service.calcularNovaQuantidade — saida', () => {
   });
 
   test('Dada uma saida maior que o stock disponivel, o resultado fica negativo (nao e bloqueado)', () => {
-    // Given: regra de negocio - o stock pode ficar negativo, a venda/saida nunca e bloqueada
+    // Given: regra de negocio - o stock pode ficar negativo, o consumo/saida nunca e bloqueado
     const nova = calcularNovaQuantidade('saida', 3, 10);
     assert.equal(nova, -7);
   });
 });
 
-describe('stock.service.calcularNovaQuantidade — venda', () => {
-  test('Dado um movimento de venda, subtrai a quantidade vendida ao stock atual', () => {
-    const nova = calcularNovaQuantidade('venda', 20, 2);
+describe('stock.service.calcularNovaQuantidade — consumo', () => {
+  test('Dado um movimento de consumo, subtrai a quantidade vendida ao stock atual', () => {
+    const nova = calcularNovaQuantidade('consumo', 20, 2);
     assert.equal(nova, 18);
   });
 
-  test('Dada uma venda que excede o stock disponivel, o stock fica negativo e a venda nao e bloqueada', () => {
-    const nova = calcularNovaQuantidade('venda', 1, 5);
+  test('Dado um consumo que excede o stock disponivel, o stock fica negativo e o consumo nao e bloqueado', () => {
+    const nova = calcularNovaQuantidade('consumo', 1, 5);
     assert.equal(nova, -4);
   });
 });
@@ -91,9 +91,9 @@ describe('stock.service.isStockBaixo', () => {
   });
 });
 
-// Derivacao usada pelo catalogo do POS (GET /api/pos/artigos): a MESMA regra do
+// Derivacao usada pelo catalogo do GIM (GET /api/gim/artigos): a MESMA regra do
 // backoffice, mas tolerante a artigos sem linha de stock.
-describe('stock.service.estadoStockArtigo — derivacao de stock_baixo para o POS', () => {
+describe('stock.service.estadoStockArtigo — derivacao de stock_baixo para o GIM', () => {
   test('Dado um artigo sem linha de stock (quantidade null), nao ha alerta e os campos ficam a null', () => {
     const estado = estadoStockArtigo(null, null);
 

@@ -12,7 +12,7 @@
   </div>
   <div class="col-md-6 col-lg-3">
     <div class="card kpi-card h-100"><div class="card-body">
-      <div class="kpi-etiqueta text-body-secondary">Movimentos internos (<%= resumo.n_vendas %>)</div>
+      <div class="kpi-etiqueta text-body-secondary">Movimentos internos (<%= resumo.n_consumos %>)</div>
       <div class="kpi-valor"><%= eur(resumo.movimentos_internos) %></div>
     </div></div>
   </div>
@@ -42,13 +42,13 @@
           <span>Fundo inicial</span><span><%= eur(resumo.fundo_inicial) %></span>
         </li>
         <li class="list-group-item d-flex justify-content-between">
-          <span>Movimentos internos (<%= resumo.n_vendas %>)</span>
+          <span>Movimentos internos (<%= resumo.n_consumos %>)</span>
           <span class="text-success">+ <%= eur(resumo.movimentos_internos) %></span>
         </li>
-        <% if (resumo.vendas_dinheiro) { %>
+        <% if (resumo.consumos_dinheiro) { %>
           <li class="list-group-item d-flex justify-content-between">
-            <span>Vendas em dinheiro (historico)</span>
-            <span class="text-success">+ <%= eur(resumo.vendas_dinheiro) %></span>
+            <span>Recebido em dinheiro (historico)</span>
+            <span class="text-success">+ <%= eur(resumo.consumos_dinheiro) %></span>
           </li>
         <% } %>
         <li class="list-group-item d-flex justify-content-between">
@@ -68,7 +68,7 @@
       </ul>
       <p class="small text-body-secondary mt-3 mb-0">
         <i class="bi bi-credit-card-2-front" aria-hidden="true"></i>
-        Multibanco (historico): <strong><%= eur(resumo.vendas_multibanco) %></strong> —
+        Multibanco (historico): <strong><%= eur(resumo.consumos_multibanco) %></strong> —
         <strong>nao</strong> faz parte do dinheiro fisico esperado em caixa.
       </p>
     </div></div>
@@ -79,9 +79,9 @@
       <dt class="col-sm-4">Operador</dt><dd class="col-sm-8"><%= sessao.utilizador_nome %></dd>
       <dt class="col-sm-4">Aberta</dt><dd class="col-sm-8"><%= dataHoraPT(sessao.aberta_em) %></dd>
       <dt class="col-sm-4">Fechada</dt><dd class="col-sm-8"><%= dataHoraPT(sessao.fechada_em) || '-' %></dd>
-      <dt class="col-sm-4">Total dos registos</dt><dd class="col-sm-8"><%= eur(resumo.vendas_total) %></dd>
-      <dt class="col-sm-4">Recebido em dinheiro (historico)</dt><dd class="col-sm-8"><%= eur(resumo.vendas_dinheiro) %></dd>
-      <dt class="col-sm-4">Recebido em multibanco (historico)</dt><dd class="col-sm-8"><%= eur(resumo.vendas_multibanco) %></dd>
+      <dt class="col-sm-4">Total dos registos</dt><dd class="col-sm-8"><%= eur(resumo.consumos_total) %></dd>
+      <dt class="col-sm-4">Recebido em dinheiro (historico)</dt><dd class="col-sm-8"><%= eur(resumo.consumos_dinheiro) %></dd>
+      <dt class="col-sm-4">Recebido em multibanco (historico)</dt><dd class="col-sm-8"><%= eur(resumo.consumos_multibanco) %></dd>
       <dt class="col-sm-4">Contado</dt><dd class="col-sm-8"><%= sessao.total_contado === null ? '-' : eur(sessao.total_contado) %></dd>
     </dl>
   </div>

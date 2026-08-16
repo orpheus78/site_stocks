@@ -19,6 +19,6 @@ router.get('/movimentos', stocksCtrl.historicoMovimentos);
 router.use('/categorias', require('./categorias.routes'));
 router.use('/artigos', require('./artigos.routes'));
 router.use('/stocks', require('./stocks.routes'));
-router.use('/vendas', require('./vendas.routes'));
+router.use('/consumos', require('./consumos.routes'));
 
 module.exports = router;

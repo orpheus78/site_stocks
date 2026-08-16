@@ -1,5 +1,5 @@
 /* ==========================================================================
-   JS partilhado (fora do POS, que tem o seu proprio /js/pos.js).
+   JS partilhado (fora do GIM, que tem o seu proprio /js/gim.js).
    Dependencias: bundle do Bootstrap + /js/valor-decimal.js + /js/confirmar.js
    (os tres carregados no layout, por esta ordem).
 
@@ -74,11 +74,6 @@
       }
     }, 6000);
   });
-
-  // ------------------------------------------------- talao: foco em "Voltar"
-
-  var talaoVoltar = document.getElementById('talaoVoltar');
-  if (talaoVoltar) talaoVoltar.focus();
 
   // ------------------------------------------- campos de valor (formato pt-PT)
 

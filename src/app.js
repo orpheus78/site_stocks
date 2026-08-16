@@ -9,7 +9,7 @@ const rotas = require('./routes');
 const { locals } = require('./middleware/auth');
 const { layout } = require('./middleware/layout');
 const { AppError } = require('./services/AppError');
-const { eur, round2, dataHoraPT, hojeISO } = require('./utils');
+const { eur, round2, dataHoraPT, hojeISO, calcularMargem, pctMargem } = require('./utils');
 
 const app = express();
 
@@ -46,6 +46,10 @@ app.locals.eur = eur;
 app.locals.round2 = round2;
 app.locals.dataHoraPT = dataHoraPT;
 app.locals.hojeISO = hojeISO;
+// Margem = preco - custo, percentagem sobre o preco de venda. Uma so
+// implementacao para todas as views (ver src/utils.js).
+app.locals.calcularMargem = calcularMargem;
+app.locals.pctMargem = pctMargem;
 app.locals.appNome = 'Bar do Campo';
 
 app.use(rotas);

@@ -12,11 +12,11 @@
   </div>
   <div class="col-sm-2">
     <label class="form-label" for="fTipo">Tipo</label>
-    <%# `venda` e o valor tecnico do tipo de movimento de stock; na interface e "consumo". %>
-    <% var rotuloTipo = { entrada: 'entrada', saida: 'saida', ajuste: 'ajuste', venda: 'consumo' }; %>
+    <%# O tipo tecnico do movimento de stock ja e `consumo`: o rotulo e directo. %>
+    <% var rotuloTipo = { entrada: 'entrada', saida: 'saida', ajuste: 'ajuste', consumo: 'consumo' }; %>
     <select class="form-select" id="fTipo" name="tipo">
       <option value="">Todos</option>
-      <% ['entrada','saida','ajuste','venda'].forEach(function (t) { %>
+      <% ['entrada','saida','ajuste','consumo'].forEach(function (t) { %>
         <option value="<%= t %>" <%= filtros.tipo === t ? 'selected' : '' %>><%= rotuloTipo[t] %></option>
       <% }); %>
     </select>
@@ -44,7 +44,7 @@
     </thead>
     <tbody>
       <%
-        var badgeTipo = { entrada: 'success', saida: 'warning', ajuste: 'info', venda: 'primary' };
+        var badgeTipo = { entrada: 'success', saida: 'warning', ajuste: 'info', consumo: 'primary' };
       %>
       <% movimentos.forEach(function (m) { %>
         <tr>

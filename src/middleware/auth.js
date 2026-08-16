@@ -24,11 +24,11 @@ function requireAdmin(req, res, next) {
 }
 
 /**
- * Acesso ao POS: qualquer utilizador autenticado (admin ou funcionario).
- * Mantido separado de requireAuth para permitir evoluir regras do POS
+ * Acesso ao GIM: qualquer utilizador autenticado (admin ou funcionario).
+ * Mantido separado de requireAuth para permitir evoluir regras do GIM
  * sem tocar no resto do backoffice.
  */
-function requirePos(req, res, next) {
+function requireGim(req, res, next) {
   const user = req.session && req.session.utilizador;
   if (user && (user.role === 'admin' || user.role === 'funcionario')) return next();
   return requireAuth(req, res, next);
@@ -38,10 +38,10 @@ function requirePos(req, res, next) {
  * Area inicial de cada perfil. Fonte unica de verdade para os redirects
  * (login, GET /) e para decidir o que a navegacao mostra.
  *  - admin       -> backoffice (tem acesso a tudo)
- *  - funcionario -> POS (unica area a que tem acesso)
+ *  - funcionario -> GIM (unica area a que tem acesso)
  */
 function areaInicial(user) {
-  return user && user.role === 'admin' ? '/admin' : '/pos';
+  return user && user.role === 'admin' ? '/admin' : '/gim';
 }
 
 /** True se o utilizador tem perfil de administrador. */
@@ -66,4 +66,4 @@ function setFlash(req, tipo, mensagem) {
   if (req.session) req.session.flash = { tipo, mensagem };
 }
 
-module.exports = { requireAuth, requireAdmin, requirePos, areaInicial, isAdmin, locals, setFlash };
+module.exports = { requireAuth, requireAdmin, requireGim, areaInicial, isAdmin, locals, setFlash };

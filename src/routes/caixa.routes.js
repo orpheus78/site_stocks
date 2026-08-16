@@ -9,7 +9,7 @@ const ctrl = require('../controllers/caixa.controller');
 const router = express.Router();
 
 // A caixa (abertura, sangrias e fecho) e responsabilidade do admin.
-// O funcionario apenas vende no POS; ver README, seccao "Perfis e permissoes".
+// O funcionario apenas vende no GIM; ver README, seccao "Perfis e permissoes".
 router.get('/caixa', requireAdmin, ctrl.ecra);
 
 router.post(

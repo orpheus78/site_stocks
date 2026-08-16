@@ -28,12 +28,15 @@ async function criar(req, res) {
     return res.redirect('/admin/artigos/novo');
   }
 
-  const { categoria_id, nome, preco, ativo, ordem, stock_inicial, stock_minimo, unidade } = req.body;
+  const { categoria_id, nome, preco, preco_custo, ativo, ordem, stock_inicial, stock_minimo, unidade } = req.body;
 
   const artigoId = await artigosRepo.criar({
     categoria_id: categoria_id ? Number(categoria_id) : null,
     nome,
     preco: round2(preco),
+    // Sem custo indicado assume-se 0 (aparece como margem de 100% na
+    // listagem, o que torna visivel que falta preencher).
+    preco_custo: round2(preco_custo || 0),
     imagem: req.file ? req.file.filename : null,
     ativo: boolCampo(ativo, true),
     ordem: Number(ordem) || 0
@@ -80,7 +83,7 @@ async function atualizar(req, res) {
     return res.redirect(`/admin/artigos/${artigo.id}/editar`);
   }
 
-  const { categoria_id, nome, preco, ativo, ordem, stock_minimo, unidade, remover_imagem } = req.body;
+  const { categoria_id, nome, preco, preco_custo, ativo, ordem, stock_minimo, unidade, remover_imagem } = req.body;
 
   let imagem = artigo.imagem;
   if (req.file) {
@@ -95,6 +98,7 @@ async function atualizar(req, res) {
     categoria_id: categoria_id ? Number(categoria_id) : null,
     nome,
     preco: round2(preco),
+    preco_custo: round2(preco_custo || 0),
     imagem,
     ativo: boolCampo(ativo),
     ordem: Number(ordem) || 0
@@ -115,7 +119,7 @@ async function remover(req, res) {
   if (!artigo) return res.status(404).render('errors/404', { titulo: 'Artigo nao encontrado' });
 
   // Artigos ja vendidos nunca sao eliminados: preservam o historico e os relatorios.
-  if (await artigosRepo.temVendas(artigo.id)) {
+  if (await artigosRepo.temConsumos(artigo.id)) {
     await artigosRepo.desativar(artigo.id);
     setFlash(req, 'warning', 'Artigo com movimentos registados: foi desativado em vez de eliminado.');
   } else {

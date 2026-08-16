@@ -34,8 +34,8 @@ describe('Rotas operacionais', () => {
 });
 
 describe('Guards de autenticacao — paginas HTML', () => {
-  test('Dado um pedido sem sessao a /pos, redireciona (302) para /login', async () => {
-    const res = await request(app).get('/pos');
+  test('Dado um pedido sem sessao a /gim, redireciona (302) para /login', async () => {
+    const res = await request(app).get('/gim');
     assert.equal(res.status, 302);
     assert.match(res.headers.location, /^\/login/);
   });
@@ -54,15 +54,15 @@ describe('Guards de autenticacao — paginas HTML', () => {
 });
 
 describe('Guards de autenticacao — rotas /api/*', () => {
-  test('Dado um pedido sem sessao a /api/pos/artigos, responde 401 em JSON (sem redirecionar)', async () => {
-    const res = await request(app).get('/api/pos/artigos');
+  test('Dado um pedido sem sessao a /api/gim/artigos, responde 401 em JSON (sem redirecionar)', async () => {
+    const res = await request(app).get('/api/gim/artigos');
     assert.equal(res.status, 401);
     assert.equal(res.body.erro, 'Nao autenticado');
   });
 
-  test('Dado um pedido sem sessao a POST /api/vendas, responde 401 em JSON', async () => {
+  test('Dado um pedido sem sessao a POST /api/consumos, responde 401 em JSON', async () => {
     const res = await request(app)
-      .post('/api/vendas')
+      .post('/api/consumos')
       .send({ itens: [{ artigo_id: 1, quantidade: 1 }], metodo_pagamento: 'dinheiro' });
     assert.equal(res.status, 401);
     assert.equal(res.body.erro, 'Nao autenticado');

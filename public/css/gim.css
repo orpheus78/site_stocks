@@ -1199,3 +1199,288 @@ body.gim-body .alert {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   OS MEUS MOVIMENTOS (/gim/meus-movimentos)
+   Consulta que o operador faz do seu proprio turno, no mesmo tablet do GIM.
+
+   Decisoes:
+    - LISTA DE CARTOES, nao tabela: uma tabela com 5 colunas obriga a scroll
+      horizontal num ecra pequeno, que e exactamente o que nao se quer atras
+      do balcao. Cada movimento e um bloco com 3 linhas curtas.
+    - Alvos de toque >= var(--gim-toque) (64px) nos campos e nos botoes.
+    - So leitura: nao ha aqui nenhum botao destrutivo para estilizar.
+   ========================================================================== */
+
+.gim-mov {
+  overflow-y: auto;
+}
+
+.gim-mov-corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.gim-mov-titulo {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--gim-texto);
+}
+
+.gim-mov-ajuda {
+  margin: 0 0 16px;
+  color: var(--gim-texto-fraco);
+  font-size: 1rem;
+}
+
+.gim-mov-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--gim-gap);
+  margin-bottom: 16px;
+}
+
+.gim-mov-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 160px;
+}
+
+.gim-mov-label {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-mov-input {
+  min-height: var(--gim-toque);
+  padding: 0 14px;
+  font-size: 1.1rem;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: var(--gim-painel);
+  color: var(--gim-texto);
+  width: 100%;
+}
+
+.gim-mov-input:focus-visible {
+  outline: 2px solid var(--gim-acento);
+  outline-offset: 2px;
+}
+
+.gim-mov-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--gim-toque);
+  padding: 0 20px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--gim-raio);
+  background: var(--gim-acento);
+  color: #fff;
+  cursor: pointer;
+}
+
+.gim-mov-btn:hover,
+.gim-mov-btn:focus-visible {
+  background: var(--gim-acento-escuro);
+  color: #fff;
+}
+
+.gim-mov-btn-fraco {
+  background: var(--gim-painel-claro);
+  border-color: var(--gim-borda);
+  color: var(--gim-texto);
+}
+
+.gim-mov-btn-fraco:hover,
+.gim-mov-btn-fraco:focus-visible {
+  background: var(--gim-painel);
+  color: var(--gim-texto);
+}
+
+.gim-mov-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gim-gap);
+  margin-bottom: 16px;
+}
+
+.gim-mov-resumo-bloco {
+  flex: 1 1 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 16px;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: var(--gim-painel);
+}
+
+.gim-mov-resumo-etiqueta {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-mov-resumo-valor {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--gim-texto);
+}
+
+.gim-mov-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gim-gap);
+}
+
+.gim-mov-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--gim-raio);
+  border: 1px solid var(--gim-borda);
+  background: var(--gim-painel);
+}
+
+.gim-mov-item.is-anulado {
+  opacity: 0.65;
+}
+
+.gim-mov-item-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gim-mov-numero {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--gim-texto);
+}
+
+.gim-mov-estado {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: var(--gim-acento);
+  color: #fff;
+}
+
+.gim-mov-estado.is-anulado {
+  background: var(--gim-perigo);
+}
+
+.gim-mov-data,
+.gim-mov-itens {
+  color: var(--gim-texto-fraco);
+  font-size: 1rem;
+}
+
+.gim-mov-total-etiqueta {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gim-texto-fraco);
+}
+
+.gim-mov-total {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--gim-texto);
+}
+
+.gim-mov-item.is-anulado .gim-mov-total {
+  text-decoration: line-through;
+}
+
+.gim-mov-vazio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 16px;
+  border-radius: var(--gim-raio);
+  border: 1px dashed var(--gim-borda);
+  color: var(--gim-texto-fraco);
+  font-size: 1.05rem;
+}
+
+/* Anular o proprio movimento: alvo grande (tablet) e cor de perigo, para
+   nunca ser tocado por engano ao lado do total. */
+.gim-mov-item-accao {
+  margin: 4px 0 0;
+}
+
+.gim-mov-anular {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 0 18px;
+  border: 2px solid var(--gim-perigo, #b02a37);
+  border-radius: var(--gim-raio);
+  background: transparent;
+  color: var(--gim-perigo, #b02a37);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.gim-mov-anular:hover,
+.gim-mov-anular:focus-visible {
+  background: var(--gim-perigo, #b02a37);
+  color: #fff;
+}
+
+.gim-mov-bloqueado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--gim-texto-fraco);
+  font-size: 0.92rem;
+}
+
+.gim-mov-nota {
+  margin: 20px 0 0;
+  color: var(--gim-texto-fraco);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 680px) {
+  .gim-mov-corpo {
+    padding: 12px;
+  }
+
+  .gim-mov-campo {
+    flex-basis: 100%;
+  }
+
+  .gim-mov-btn {
+    flex: 1 1 auto;
+  }
+}

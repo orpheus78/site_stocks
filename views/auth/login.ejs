@@ -34,11 +34,47 @@
     <div class="card shadow-sm mt-3">
       <div class="card-body">
         <h2 class="h6 text-uppercase text-body-secondary mb-3">Entrada rapida por PIN</h2>
-        <form method="post" action="/gim/pin" autocomplete="off" class="d-flex gap-2">
-          <input class="form-control form-control-lg text-center" name="pin" inputmode="numeric"
-                 pattern="[0-9]{4}" maxlength="4" placeholder="••••" required
-                 aria-label="PIN de 4 digitos">
-          <button class="btn btn-success btn-lg" type="submit"><i class="bi bi-arrow-right-circle"></i></button>
+
+        <%#
+          Sem JavaScript ve-se apenas o campo (mascarado) e o botao Entrar.
+          Os pontos e o teclado nascem com `hidden` e so o /js/pin-teclado.js os
+          revela — degradacao sem ecra partido. O PIN nunca aparece em claro.
+        %>
+        <form method="post" action="/gim/pin" autocomplete="off" data-pin-teclado>
+          <div class="pin-pontos mb-3" hidden data-pin-pontos>
+            <span class="pin-ponto" data-pin-ponto></span>
+            <span class="pin-ponto" data-pin-ponto></span>
+            <span class="pin-ponto" data-pin-ponto></span>
+            <span class="pin-ponto" data-pin-ponto></span>
+          </div>
+
+          <input type="password" class="form-control form-control-lg text-center mb-3"
+                 name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+                 placeholder="••••" required autocomplete="off"
+                 aria-label="PIN de 4 digitos" data-pin-campo>
+
+          <div class="pin-teclado mb-3" hidden data-pin-grelha>
+            <button type="button" class="pin-tecla" data-pin-tecla="1">1</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="2">2</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="3">3</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="4">4</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="5">5</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="6">6</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="7">7</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="8">8</button>
+            <button type="button" class="pin-tecla" data-pin-tecla="9">9</button>
+            <button type="button" class="pin-tecla pin-tecla-apagar" data-pin-tecla="apagar"
+                    aria-label="Apagar o ultimo digito"><i class="bi bi-backspace"></i></button>
+            <button type="button" class="pin-tecla" data-pin-tecla="0">0</button>
+            <button type="button" class="pin-tecla pin-tecla-limpar" data-pin-tecla="limpar"
+                    aria-label="Limpar o PIN">C</button>
+          </div>
+
+          <p class="form-text mb-2" role="status" aria-live="polite" data-pin-estado></p>
+
+          <button class="btn btn-success btn-lg w-100 btn-toque" type="submit">
+            <i class="bi bi-box-arrow-in-right"></i> Entrar
+          </button>
         </form>
         <p class="form-text mb-0">Vai directamente para o ecra de Movimentos Internos.</p>
       </div>

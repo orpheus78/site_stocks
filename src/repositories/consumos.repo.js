@@ -98,6 +98,41 @@ async function listar({ de, ate, estado, metodo, limite = 200 } = {}, conn) {
   );
 }
 
+/**
+ * Movimentos de UM utilizador.
+ *
+ * O `utilizadorId` e o PRIMEIRO parametro, propositadamente fora do objecto de
+ * filtros: assim e impossivel um filtro vindo do cliente (query string, body)
+ * sobrepor o dono dos registos por engano. Quem chama tem de o passar
+ * explicitamente, e no controller ele vem sempre de `req.session.utilizador.id`.
+ */
+async function listarDoUtilizador(utilizadorId, { de, ate, limite = 200 } = {}, conn) {
+  const where = ['v.utilizador_id = ?'];
+  const params = [Number(utilizadorId)];
+
+  if (de) {
+    where.push('v.criado_em >= ?');
+    params.push(`${de} 00:00:00`);
+  }
+  if (ate) {
+    where.push('v.criado_em <= ?');
+    params.push(`${ate} 23:59:59`);
+  }
+  params.push(Number(limite));
+
+  return run(conn).query(
+    `SELECT v.id, v.numero, v.total, v.estado, v.criado_em, v.utilizador_id,
+            v.sessao_caixa_id, s.estado AS sessao_estado,
+            (SELECT COUNT(*) FROM consumo_itens vi WHERE vi.consumo_id = v.id) AS n_itens
+     FROM consumos v
+     LEFT JOIN sessoes_caixa s ON s.id = v.sessao_caixa_id
+     WHERE ${where.join(' AND ')}
+     ORDER BY v.criado_em DESC, v.id DESC
+     LIMIT ?`,
+    params
+  );
+}
+
 async function anular(id, conn) {
   await run(conn).query("UPDATE consumos SET estado = 'anulada' WHERE id = ?", [id]);
 }
@@ -116,5 +151,6 @@ module.exports = {
   porIdParaAtualizar,
   itensDaConsumo,
   listar,
+  listarDoUtilizador,
   anular
 };

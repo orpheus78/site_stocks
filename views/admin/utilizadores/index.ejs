@@ -1,0 +1,101 @@
+<%#
+  Gestao de utilizadores (exclusiva do admin).
+
+  NUNCA se mostram credenciais: a listagem so sabe SE existe PIN (`tem_pin`),
+  nunca o PIN nem qualquer hash (ver utilizadores.repo.CAMPOS_SEGUROS).
+
+  Nao ha eliminar: `consumos.utilizador_id` aponta para ca e apagar destruiria
+  o historico de quem registou o que. Desactivar (ativo = 0) chega -- um
+  utilizador desactivado nao entra por password nem aparece no login por PIN.
+%>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h4 mb-0"><i class="bi bi-people" aria-hidden="true"></i> Utilizadores</h1>
+  <a class="btn btn-primary" href="/admin/utilizadores/novo">
+    <i class="bi bi-plus-lg" aria-hidden="true"></i> Novo utilizador
+  </a>
+</div>
+
+<div class="alert alert-info small">
+  <i class="bi bi-info-circle" aria-hidden="true"></i>
+  O <strong>PIN identifica a pessoa sozinho</strong> no ecra de registo (GIM), sem nome de utilizador.
+  Por isso nao pode haver dois PINs iguais: os movimentos ficariam atribuidos a pessoa errada.
+</div>
+
+<div class="table-responsive">
+  <table class="table table-hover tabela-compacta align-middle">
+    <thead>
+      <tr>
+        <th scope="col">Nome</th><th scope="col">Utilizador</th><th scope="col">Perfil</th>
+        <th scope="col">PIN</th><th scope="col">Estado</th><th scope="col"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <%# 6 colunas: Nome, Utilizador, Perfil, PIN, Estado e accoes. Manter o
+          colspan da linha "sem dados" em sincronia com este numero. %>
+      <% utilizadores.forEach(function (u) { %>
+        <tr class="<%= Number(u.ativo) === 1 ? '' : 'text-body-secondary' %>">
+          <td class="fw-semibold">
+            <%= u.nome %>
+            <% if (Number(u.id) === Number(utilizadorAtualId)) { %>
+              <span class="badge text-bg-info">voce</span>
+            <% } %>
+          </td>
+          <td><code><%= u.username %></code></td>
+          <td>
+            <span class="badge text-bg-<%= u.role === 'admin' ? 'primary' : 'secondary' %>"><%= u.role %></span>
+          </td>
+          <td>
+            <%# So o FACTO de existir PIN. O valor nunca sai da base de dados. %>
+            <% if (Number(u.tem_pin) === 1) { %>
+              <span class="text-success"><i class="bi bi-check-circle" aria-hidden="true"></i> definido</span>
+            <% } else { %>
+              <span class="text-body-secondary">sem PIN</span>
+            <% } %>
+          </td>
+          <td>
+            <span class="badge text-bg-<%= Number(u.ativo) === 1 ? 'success' : 'secondary' %>">
+              <%= Number(u.ativo) === 1 ? 'Activo' : 'Desactivado' %>
+            </span>
+          </td>
+          <td class="text-end text-nowrap">
+            <a class="btn btn-outline-secondary btn-sm" href="/admin/utilizadores/<%= u.id %>/editar"
+               aria-label="Editar <%= u.nome %>"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+
+            <% if (Number(u.ativo) === 1) { %>
+              <% if (Number(u.id) !== Number(utilizadorAtualId)) { %>
+                <%# Confirmacao pelo modal da aplicacao (/js/confirmar.js): zero JS inline. %>
+                <form method="post" action="/admin/utilizadores/<%= u.id %>/desactivar" class="d-inline"
+                      data-confirmar="Desactivar «<%= u.nome %>»?"
+                      data-confirmar-titulo="Desactivar utilizador"
+                      data-confirmar-detalhe="Deixa de poder entrar (password e PIN). O historico de movimentos dele mantem-se intacto."
+                      data-confirmar-ok="Desactivar utilizador"
+                      data-confirmar-perigo="1">
+                  <button class="btn btn-outline-danger btn-sm" aria-label="Desactivar <%= u.nome %>">
+                    <i class="bi bi-person-slash" aria-hidden="true"></i> Desactivar
+                  </button>
+                </form>
+              <% } else { %>
+                <%# A propria conta nao aparece com "Desactivar": alem do guard
+                    do servidor, evita-se o engano a um toque de distancia. %>
+                <span class="text-body-secondary small">a sua conta</span>
+              <% } %>
+            <% } else { %>
+              <form method="post" action="/admin/utilizadores/<%= u.id %>/activar" class="d-inline"
+                    data-confirmar="Reactivar «<%= u.nome %>»?"
+                    data-confirmar-titulo="Reactivar utilizador"
+                    data-confirmar-detalhe="Volta a poder entrar com a password e o PIN que ja tinha."
+                    data-confirmar-ok="Reactivar utilizador">
+                <button class="btn btn-outline-success btn-sm" aria-label="Reactivar <%= u.nome %>">
+                  <i class="bi bi-person-check" aria-hidden="true"></i> Reactivar
+                </button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (!utilizadores.length) { %>
+        <tr data-sem-dados="1"><td colspan="6" class="text-body-secondary">Sem utilizadores.</td></tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>

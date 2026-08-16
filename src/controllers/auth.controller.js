@@ -28,6 +28,8 @@ function paginaLogin(req, res) {
   res.render('auth/login', {
     titulo: 'Entrar',
     layoutSemNav: true,
+    // Teclado do PIN: so faz sentido nesta pagina, por isso nao vai no layout.
+    scripts: ['/js/pin-teclado.js'],
     next: destinoSeguro(req.query.next, ''),
     erro: null
   });
@@ -43,6 +45,7 @@ async function login(req, res, next) {
     return res.status(401).render('auth/login', {
       titulo: 'Entrar',
       layoutSemNav: true,
+      scripts: ['/js/pin-teclado.js'],
       next: pedido,
       erro: 'Utilizador ou password invalidos.'
     });

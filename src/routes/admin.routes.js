@@ -20,5 +20,8 @@ router.use('/categorias', require('./categorias.routes'));
 router.use('/artigos', require('./artigos.routes'));
 router.use('/stocks', require('./stocks.routes'));
 router.use('/consumos', require('./consumos.routes'));
+// Gestao de utilizadores: exclusiva do admin, tal como o resto de /admin
+// (o requireAdmin acima cobre este router).
+router.use('/utilizadores', require('./utilizadores.routes'));
 
 module.exports = router;

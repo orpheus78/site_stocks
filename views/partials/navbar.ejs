@@ -1,13 +1,13 @@
 <nav class="navbar navbar-expand-lg bg-dark border-bottom border-body" data-bs-theme="dark">
   <div class="container-fluid">
-    <a class="navbar-brand fw-bold" href="/pos"><i class="bi bi-cup-hot"></i> <%= appNome %></a>
+    <a class="navbar-brand fw-bold" href="/gim"><i class="bi bi-cup-hot"></i> <%= appNome %></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navPrincipal">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navPrincipal">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <%# O acesso ao ecra de registo faz-se pela marca "Bar do Campo", que aponta
-            para /pos. Evita-se assim ter dois "Movimentos Internos" na mesma barra. %>
+            para /gim. Evita-se assim ter dois "Movimentos Internos" na mesma barra. %>
         <%# Caixa e backoffice sao exclusivos do admin (ver src/middleware/auth.js). %>
         <% if (isAdmin) { %>
           <li class="nav-item"><a class="nav-link<%= currentPath.startsWith('/caixa') ? ' active' : '' %>" href="/caixa"><i class="bi bi-cash-coin"></i> Caixa</a></li>
@@ -20,7 +20,7 @@
               <li><a class="dropdown-item" href="/admin/stocks">Stocks</a></li>
               <li><a class="dropdown-item" href="/admin/movimentos">Movimentos de stock</a></li>
               <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item<%= currentPath.startsWith('/admin/vendas') ? ' active' : '' %>" href="/admin/vendas">Movimentos Internos</a></li>
+              <li><a class="dropdown-item<%= currentPath.startsWith('/admin/consumos') ? ' active' : '' %>" href="/admin/consumos">Movimentos Internos</a></li>
               <li><a class="dropdown-item" href="/admin/relatorios">Relatorios</a></li>
             </ul>
           </li>

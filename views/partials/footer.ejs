@@ -1,5 +1,16 @@
+<%#
+  O rodape acompanha o layout com navegacao (backoffice + caixa + login).
+  O ecra de movimentos internos (GIM) usa `layoutSemNav` e fica de fora de
+  proposito: e um ecra touch de operacao rapida, com alvos de toque grandes,
+  e um rodape fixo so roubava espaco util ao catalogo e ao carrinho.
+
+  A mencao "sem valor fiscal" e deliberadamente discreta (texto secundario,
+  nao um alerta): estes registos sao de controlo INTERNO de stock e consumos
+  e nunca documentos de venda.
+%>
 <% if (!(typeof layoutSemNav !== 'undefined' && layoutSemNav)) { %>
   <footer class="container-fluid text-center text-body-secondary py-3 small">
-    <%= appNome %> · Gestao de bar
+    <div><%= appNome %> · Gestao de bar</div>
+    <div data-sem-valor-fiscal="1">Registo interno — sem valor fiscal</div>
   </footer>
 <% } %>
